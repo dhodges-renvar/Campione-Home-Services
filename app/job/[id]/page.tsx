@@ -19,6 +19,16 @@ export default function JobScreen() {
   const [summary, setSummary] = useState('');
   const [blocker, setBlocker] = useState('');
   const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState('');
+  const STATUSES = ['scheduled','in_progress','qc_pending','complete','invoiced','paid','cancelled'];
+  async function setStatus(s: string) {
+    await supabase.from('jobs').update({
+      status: s,
+      actual_end: (s === 'complete' ? new Date().toISOString().slice(0,10) : job?.actual_end) ?? null,
+    }).eq('id', id);
+    setJob((j: any) => ({ ...j, status: s }));
+    setToast('Status updated'); setTimeout(() => setToast(''), 1600);
+  }
 
   useEffect(() => {
     (async () => {
@@ -89,6 +99,13 @@ export default function JobScreen() {
       <OfflineBar />
       <div className="main">
         <div className="field">
+          <label>Job status</label>
+          <select value={job.status} onChange={(e) => setStatus(e.target.value)}>
+            {STATUSES.map((s) => <option key={s} value={s}>{s.replace('_',' ')}</option>)}
+          </select>
+        </div>
+
+        <div className="field">
           <label>{t('hoursToday', lang)}</label>
           <div style={{ fontSize: 34, fontWeight: 680, letterSpacing: '-1px' }}>
             {hours.toFixed(1)}
@@ -123,7 +140,7 @@ export default function JobScreen() {
 
       <div className="dock">
         <div className="inner">
-          <div className="row">
+          <div className="pair">
             <button className={entry ? 'btn stop' : 'btn ghost'} onClick={toggleClock}>
               {entry ? t('clockOut', lang) : t('clockIn', lang)}
             </button>
@@ -133,6 +150,7 @@ export default function JobScreen() {
           </div>
         </div>
       </div>
+      {toast && <div className="saved">{toast}</div>}
       </div>
     </Chrome>
   );

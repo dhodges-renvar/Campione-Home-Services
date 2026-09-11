@@ -22,35 +22,31 @@ export default function Login() {
   }
 
   return (
-    <>
-      <div className="bar">
-        <h1>Campione</h1>
-        <button className="lang" onClick={() => setLang(lang === 'en' ? 'es' : 'en')}>
-          {lang === 'en' ? 'Espanol' : 'English'}
-        </button>
+    <div className="auth">
+      <div className="brandblock">
+        <Mark size={86} outer="#F7F4EF" inner="#8B939B" />
+        <div className="wordmark">CAMPIONE</div>
+        <div className="tagline">Home Services</div>
       </div>
-      <div className="main" style={{ paddingTop: 56 }}>
-        <Mark size={64} />
-        <div className="field">
-          <label htmlFor="e">{t('email', lang)}</label>
-          <input id="e" type="email" inputMode="email" autoCapitalize="none" autoComplete="username"
-            value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div className="field" style={{ paddingTop: 0 }}>
-          <label htmlFor="p">{t('password', lang)}</label>
-          <input id="p" type="password" autoComplete="current-password"
-            value={pw} onChange={(e) => setPw(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && go()} />
-        </div>
-        {err && <div className="err">{err}</div>}
-      </div>
-      <div className="dock">
-        <div className="inner">
-          <button className="btn" onClick={go} disabled={busy || !email || !pw}>
-            {t('signIn', lang)}
-          </button>
-        </div>
-      </div>
-    </>
+
+      <label htmlFor="e">{t('email', lang)}</label>
+      <input id="e" type="email" inputMode="email" autoCapitalize="none" autoComplete="username"
+        value={email} onChange={(e) => setEmail(e.target.value)} />
+
+      <label htmlFor="p">{t('password', lang)}</label>
+      <input id="p" type="password" autoComplete="current-password"
+        value={pw} onChange={(e) => setPw(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && go()} />
+
+      {err && <div className="err">{err}</div>}
+
+      <button className="go" onClick={go} disabled={busy || !email || !pw}>
+        {busy ? '…' : t('signIn', lang)}
+      </button>
+
+      <button className="lang" onClick={() => setLang(lang === 'en' ? 'es' : 'en')}>
+        {lang === 'en' ? 'Ver en espanol' : 'View in English'}
+      </button>
+    </div>
   );
 }

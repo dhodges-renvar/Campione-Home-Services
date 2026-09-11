@@ -160,7 +160,7 @@ export default function NewQuote() {
                       onClick={() => setRoom(r.key, { [k]: !(r as any)[k] } as any)}>{lbl}</button>
                   ))}
                 </div>
-                <div className="sub2" style={{ fontSize: 13, color: 'var(--grey)', marginTop: 10 }}>
+                <div className="t2" style={{ marginTop: 12 }}>
                   {Math.round(q.wallSF)} sf walls · {Math.round(q.ceilingSF)} sf ceiling · {Math.round(q.baseLF)} lf base
                 </div>
               </div>
@@ -225,9 +225,9 @@ export default function NewQuote() {
         {out && (
           <div className="dock">
             <div className="inner">
-              <div className="readout" style={{ margin: '-12px -18px 12px', position: 'static' }}>
+              <div className="readout">
                 <div className="big">{money(out.price)}</div>
-                <div className="row2">
+                <div className="r2">
                   <span><b>{out.totalHours.toFixed(1)}</b> hrs</span>
                   <span><b>{out.manDays.toFixed(1)}</b> man days</span>
                   <span><b>{out.finishGal.toFixed(1)}</b> gal</span>

@@ -46,12 +46,3 @@ Android: Chrome -> menu -> Install app
 
 Checklist items are rows in `checklist_items`, not code. Edit them in the Supabase
 table editor. No rebuild, no redeploy.
-
-## Database files, in order
-
-1. campione_schema.sql           tables, triggers, RLS, price book, checklists
-2. campione_dashboard_views.sql  dashboard_kpis() + detail views
-3. campione_setup_step2.sql      storage policies, signup trigger, makes you owner
-4. campione_seed_demo.sql        demo data so every screen has something in it
-
-Remove the demo data later with:  select wipe_demo_data();

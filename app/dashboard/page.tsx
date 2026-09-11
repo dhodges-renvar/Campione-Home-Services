@@ -45,7 +45,7 @@ export default function Dashboard() {
     <>
       <button className="acc" onClick={() => setOpen(open === id ? null : id)}>
         <span>{title}</span>
-        <span className="accr">{count}{open === id ? '  \u2212' : '  +'}</span>
+        <span className="r">{count}{open === id ? '  \u2212' : '  +'}</span>
       </button>
       {open === id && <div>{children}</div>}
     </>
@@ -99,9 +99,9 @@ export default function Dashboard() {
               {quotes.map((q) => (
                 <div className="lead" key={q.id}>
                   <div className="body">
-                    <div className="who">{money(q.price)} · {q.customer?.trim() || 'No name'}</div>
-                    <div className="sub2">{q.address_line1}{q.city ? `, ${q.city}` : ''}</div>
-                    <div className="sub2">
+                    <div className="t1">{money(q.price)} · {q.customer?.trim() || 'No name'}</div>
+                    <div className="t2">{q.address_line1}{q.city ? `, ${q.city}` : ''}</div>
+                    <div className="t2">
                       {q.service_type?.replace('_', ' ')} · {q.business_type?.replace('_', ' ')}
                       {q.days_out != null && ` · out ${q.days_out}d`}
                       {q.gross_profit != null && ` · ${money(q.gross_profit)} profit`}
@@ -118,12 +118,12 @@ export default function Dashboard() {
               {live.map((j) => (
                 <div className="lead" key={j.id}>
                   <div className="body">
-                    <div className="who">
+                    <div className="t1">
                       <span className="pip" style={{ background: divisionColor(j.division) }} />
                       {j.address_line1 || `Job #${j.job_number}`}
                     </div>
-                    <div className="sub2">{j.customer?.trim()} · {j.sub_company || j.crew_lead || 'unassigned'}</div>
-                    <div className="sub2">
+                    <div className="t2">{j.customer?.trim()} · {j.sub_company || j.crew_lead || 'unassigned'}</div>
+                    <div className="t2">
                       {money(j.contract_price)}
                       {j.percent_complete != null && ` · ${j.percent_complete}% done`}
                       {j.hours_ratio != null && ` · ${Math.round(j.hours_ratio * 100)}% of estimated hours`}
@@ -140,10 +140,10 @@ export default function Dashboard() {
               {appts.map((a) => (
                 <div className="lead" key={a.id}>
                   <div className="body">
-                    <div className="who">{new Date(a.starts_at).toLocaleString([], {
+                    <div className="t1">{new Date(a.starts_at).toLocaleString([], {
                       weekday: 'short', hour: 'numeric', minute: '2-digit' })}</div>
-                    <div className="sub2">{a.customer?.trim()} · {a.address}</div>
-                    <div className="sub2">{a.kind} · {a.assigned_to || 'unassigned'}</div>
+                    <div className="t2">{a.customer?.trim()} · {a.address}</div>
+                    <div className="t2">{a.kind} · {a.assigned_to || 'unassigned'}</div>
                   </div>
                   {a.phone && <a className="callbtn" href={`tel:${a.phone}`}>Call</a>}
                 </div>
@@ -154,8 +154,8 @@ export default function Dashboard() {
               {qc.map((q) => (
                 <div className="lead" key={q.id}>
                   <div className="body">
-                    <div className="who">{q.address_line1 || `Job #${q.job_number}`}</div>
-                    <div className="sub2">{q.sub_company || q.submitted_by} · {q.fail_count} item{q.fail_count === 1 ? '' : 's'} failed</div>
+                    <div className="t1">{q.address_line1 || `Job #${q.job_number}`}</div>
+                    <div className="t2">{q.sub_company || q.submitted_by} · {q.fail_count} item{q.fail_count === 1 ? '' : 's'} failed</div>
                   </div>
                   <span className="sla bad">failed</span>
                 </div>
@@ -166,11 +166,11 @@ export default function Dashboard() {
               {pl.map((d) => (
                 <div className="lead" key={d.division}>
                   <div className="body">
-                    <div className="who">
+                    <div className="t1">
                       <span className="pip" style={{ background: divisionColor(d.division) }} />
                       {DIVISION_LABEL[d.division] || d.division}
                     </div>
-                    <div className="sub2">
+                    <div className="t2">
                       {d.jobs_complete || 0} jobs · {money(d.revenue)}
                       {d.avg_margin != null && ` · ${Math.round(d.avg_margin * 100)}% margin`}
                     </div>

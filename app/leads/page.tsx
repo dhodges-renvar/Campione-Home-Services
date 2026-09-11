@@ -60,8 +60,8 @@ export default function Leads() {
         ) : rows.map((l) => (
           <div className="lead" key={l.id}>
             <div className="body">
-              <div className="who">{l.customer?.trim() || 'Unknown caller'}</div>
-              <div className="sub2">
+              <div className="t1">{l.customer?.trim() || 'Unknown caller'}</div>
+              <div className="t2">
                 {l.division?.replace('_', ' ')} · {l.source_code?.replace(/_/g, ' ')} · {since(l.received_at)}
               </div>
               <div style={{ marginTop: 8 }}>

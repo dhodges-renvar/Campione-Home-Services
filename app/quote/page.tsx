@@ -31,11 +31,11 @@ export default function QuoteList() {
             Start one and it lands here.
           </div>
         ) : rows.map((e) => (
-          <button className="job" key={e.id} onClick={() => router.push(`/quote/new?id=${e.id}`)}>
-            <div className="addr">{money(e.price)} · {e.customer?.trim() || 'No name'}</div>
-            <div className="meta">{e.address_line1}{e.city ? `, ${e.city}` : ''}</div>
+          <button className="row" key={e.id} onClick={() => router.push(`/quote/new?id=${e.id}`)}>
+            <div className="t1">{money(e.price)} · {e.customer?.trim() || 'No name'}</div>
+            <div className="t2">{e.address_line1}{e.city ? `, ${e.city}` : ''}</div>
             <div className="tagrow">
-              <span className="tag" style={{ color: divisionColor(e.division) }}>{e.division?.replace('_', ' ')}</span>
+              <span className="tag accent" style={{ ["--accent" as any]: divisionColor(e.division) }}>{e.division?.replace('_', ' ')}</span>
               <span className="tag">{e.status}</span>
               {e.days_since_sent != null && <span className="tag">sent {e.days_since_sent}d ago</span>}
             </div>

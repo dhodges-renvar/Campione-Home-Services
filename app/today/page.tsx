@@ -6,6 +6,7 @@ import { startFlushLoop, pending } from '@/lib/queue';
 import { t, useLang } from '@/lib/i18n';
 import OfflineBar from '@/components/OfflineBar';
 import Chrome from '@/components/Chrome';
+import { divisionColor } from '@/lib/theme';
 
 type Job = {
   id: string; job_number: number; service_type: string; status: string;
@@ -30,7 +31,7 @@ export default function Today() {
       if (!s.session) { router.replace('/login'); return; }
       const { data } = await supabase
         .from('jobs')
-        .select('id,job_number,service_type,status,scheduled_start,scope_summary,properties(address_line1,city),contacts(first_name,last_name)')
+        .select('id,job_number,division,service_type,status,scheduled_start,scope_summary,properties(address_line1,city),contacts(first_name,last_name)')
         .in('status', ['scheduled', 'in_progress', 'qc_failed'])
         .order('scheduled_start', { ascending: true });
       setJobs((data as any) || []);
@@ -62,13 +63,13 @@ export default function Today() {
             {t('noJobsBody', lang)}
           </div>
         ) : jobs.map((j) => (
-          <button key={j.id} className="job" onClick={() => router.push(`/job/${j.id}`)}>
-            <div className="addr">{j.properties?.address_line1 || `Job #${j.job_number}`}</div>
-            <div className="meta">
+          <button key={j.id} className="row" onClick={() => router.push(`/job/${j.id}`)}>
+            <div className="t1"><span className="pip" style={{ background: divisionColor((j as any).division) }} />{j.properties?.address_line1 || `Job #${j.job_number}`}</div>
+            <div className="t2">
               {j.properties?.city}
               {j.contacts ? ` · ${j.contacts.first_name} ${j.contacts.last_name}` : ''}
             </div>
-            {j.scope_summary && <div className="meta">{j.scope_summary}</div>}
+            {j.scope_summary && <div className="t2">{j.scope_summary}</div>}
             <div className="tagrow">
               <span className="tag">{j.service_type.replace('_', ' ')}</span>
               {openIds.has(j.id) && <span className="tag live">{t('working', lang)}</span>}
