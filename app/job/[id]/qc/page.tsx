@@ -26,6 +26,18 @@ export default function QC() {
   const [done, setDone] = useState(false);
   const [division, setDivision] = useState<string>('painting');
 
+  const [templates, setTemplates] = useState<any[]>([]);
+
+  async function attach(templateId: string) {
+    await supabase.from('checklist_submissions').insert({ job_id: id, template_id: templateId });
+    location.reload();
+  }
+
+  useEffect(() => {
+    supabase.from('checklist_templates').select('*').eq('active', true).eq('kind', 'closeout')
+      .order('code').then(({ data }) => setTemplates(data || []));
+  }, []);
+
   useEffect(() => {
     (async () => {
       const { data: s } = await supabase.from('checklist_submissions')
@@ -103,7 +115,16 @@ export default function QC() {
       <div className="bar">
         <button className="back" onClick={() => router.back()}>{'\u2190'} {t('back', lang)}</button>
       </div>
-      <div className="empty"><strong>No checklist yet</strong>The office attaches one when the job is scheduled.</div>
+      <div className="empty">
+        <strong>No checklist on this job</strong>
+        Pick the one that fits and it will attach right now.
+      </div>
+      {templates.map((t) => (
+        <button className="row" key={t.id} onClick={() => attach(t.id)}>
+          <div className="t1">{t.label}</div>
+          <div className="t2">Attach and start</div>
+        </button>
+      ))}
     </div></Chrome>
   );
 

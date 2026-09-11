@@ -144,7 +144,7 @@ export default function JobScreen() {
             <button className={entry ? 'btn stop' : 'btn ghost'} onClick={toggleClock}>
               {entry ? t('clockOut', lang) : t('clockIn', lang)}
             </button>
-            <button className="btn" onClick={() => router.push(`/job/${id}/qc`)}>
+            <button className="btn accent" onClick={() => router.push(`/job/${id}/qc`)}>
               {t('closeout', lang)}
             </button>
           </div>

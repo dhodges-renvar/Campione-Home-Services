@@ -21,6 +21,7 @@ export default function Today() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [queued, setQueued] = useState(0);
+  const [qcReady, setQcReady] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,6 +39,9 @@ export default function Today() {
       const { data: open } = await supabase
         .from('time_entries').select('job_id').is('ended_at', null);
       setOpenIds(new Set((open || []).map((r: any) => r.job_id)));
+      const { data: cs } = await supabase
+        .from('checklist_submissions').select('job_id').is('submitted_at', null);
+      setQcReady(new Set((cs || []).map((r: any) => r.job_id)));
       setLoading(false);
     })();
   }, [router]);
@@ -74,6 +78,7 @@ export default function Today() {
               <span className="tag">{j.service_type.replace('_', ' ')}</span>
               {openIds.has(j.id) && <span className="tag live">{t('working', lang)}</span>}
               {j.status === 'qc_failed' && <span className="tag due">Needs fixing</span>}
+              {qcReady.has(j.id) && <span className="tag">Closeout ready</span>}
             </div>
           </button>
         ))}
