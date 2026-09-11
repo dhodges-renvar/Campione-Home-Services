@@ -1,4 +1,4 @@
-const P = { fill: 'none', stroke: '#7A828A', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+const P = { fill: 'none', stroke: '#FFFFFF', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
 const box = { className: 'glyph', viewBox: '0 0 24 24', xmlns: 'http://www.w3.org/2000/svg' };
 
 export const IconToday = () => (
