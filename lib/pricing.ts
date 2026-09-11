@@ -1,0 +1,135 @@
+'use client';
+/* Mirrors the v4 price book exactly.
+   Hours = quantity / production rate (per coat).
+   Coats MULTIPLY. Every other modifier ADDS its delta — multiplying them all
+   together compounds absurdly, which is why the workbook does it this way.
+   No opening deductions: cut-in labor offsets the paint saved, and doors and
+   windows are priced as separate items on top. */
+
+export type Rate = {
+  id: string; code: string; label: string; unit: string;
+  production_rate: number; coverage: number | null;
+  material_cost: number | null; scope_group: string | null; category: string;
+};
+export type Modifier = {
+  group_code: string; option_code: string; label: string;
+  multiplier: number; is_multiplicative: boolean;
+};
+export type Settings = Record<string, number>;
+
+export type Room = {
+  key: string; name: string;
+  length: number; width: number; height: number;
+  doors: number; windows: number; closets: number;
+  walls: boolean; ceiling: boolean; base: boolean; crown: boolean;
+  paintDoors: boolean; paintWindows: boolean; paintClosets: boolean;
+};
+
+export const emptyRoom = (n = 1): Room => ({
+  key: Math.random().toString(36).slice(2),
+  name: `Room ${n}`, length: 0, width: 0, height: 9,
+  doors: 0, windows: 0, closets: 0,
+  walls: true, ceiling: true, base: true, crown: false,
+  paintDoors: true, paintWindows: true, paintClosets: false,
+});
+
+export type JobSettings = {
+  condition: string; coats: string; color: string; occupancy: string;
+  access: string; texture: string; sheen: string; project_type: string;
+  paint_tier: string; primer: boolean;
+  door_scope: string; window_scope: string;
+  business_type: string;
+  miles: number; days_on_site: number;
+};
+
+const rate = (rates: Rate[], code: string) => rates.find((r) => r.code === code);
+const mod = (mods: Modifier[], g: string, o: string) =>
+  mods.find((m) => m.group_code === g && m.option_code === o);
+
+export function roomQuantities(r: Room) {
+  const perimeter = 2 * ((r.length || 0) + (r.width || 0));
+  return {
+    perimeter,
+    wallSF:    r.walls   ? perimeter * (r.height || 0) : 0,
+    ceilingSF: r.ceiling ? (r.length || 0) * (r.width || 0) : 0,
+    baseLF:    r.base    ? Math.max(perimeter - (r.doors || 0) * 3, 0) : 0,
+    crownLF:   r.crown   ? perimeter : 0,
+    doors:     r.paintDoors   ? (r.doors || 0)   : 0,
+    windows:   r.paintWindows ? (r.windows || 0) : 0,
+    closets:   r.paintClosets ? (r.closets || 0) : 0,
+  };
+}
+
+export function laborMultiplier(mods: Modifier[], s: JobSettings) {
+  const coats = mod(mods, 'coats', s.coats)?.multiplier ?? 1.7;
+  const primerAdd = s.primer ? 0.7 : 0;
+  const deltas = [
+    mod(mods, 'condition', s.condition)?.multiplier,
+    mod(mods, 'color', s.color)?.multiplier,
+    mod(mods, 'occupancy', s.occupancy)?.multiplier,
+    mod(mods, 'access', s.access)?.multiplier,
+    mod(mods, 'texture', s.texture)?.multiplier,
+    mod(mods, 'sheen', s.sheen)?.multiplier,
+    mod(mods, 'project_type', s.project_type)?.multiplier,
+  ].map((m) => (m ?? 1) - 1);
+  const additive = 1 + deltas.reduce((a, b) => a + b, 0);
+  return (coats + primerAdd) * additive;
+}
+
+export function priceEstimate(opts: {
+  rooms: Room[]; rates: Rate[]; mods: Modifier[]; settings: Settings;
+  job: JobSettings; paintCost: number; margin: number; minimum: number;
+}) {
+  const { rooms, rates, mods, settings, job, paintCost, margin, minimum } = opts;
+  const coatCount = Number(job.coats) || 2;
+
+  const walls   = rate(rates, job.texture === 'popcorn' ? 'walls_smooth' : 'walls_smooth')!;
+  const ceiling = rate(rates, 'ceiling_smooth')!;
+  const base    = rate(rates, 'baseboard')!;
+  const crown   = rate(rates, 'crown')!;
+  const door    = rate(rates, job.door_scope)   || rate(rates, 'door_full')!;
+  const win     = rate(rates, job.window_scope) || rate(rates, 'window_casing_sill')!;
+  const closet  = rate(rates, 'closet')!;
+
+  let hours = 0, finishGal = 0, primerArea = 0;
+
+  for (const r of rooms) {
+    const q = roomQuantities(r);
+    const parts: [number, Rate | undefined][] = [
+      [q.wallSF, walls], [q.ceilingSF, ceiling], [q.baseLF, base],
+      [q.crownLF, crown], [q.doors, door], [q.windows, win], [q.closets, closet],
+    ];
+    for (const [qty, ri] of parts) {
+      if (!ri || !qty) continue;
+      hours += qty / ri.production_rate;
+      if (ri.coverage) finishGal += (qty / ri.coverage) * coatCount;
+    }
+    primerArea += q.wallSF + q.ceilingSF;
+  }
+
+  const mult = laborMultiplier(mods, job);
+  const fieldHours = hours * mult;
+  const setupHours = settings['setup_hours_per_job'] ?? 2;
+  const totalHours = fieldHours + setupHours;
+
+  const primerGal = job.primer && walls.coverage ? primerArea / walls.coverage : 0;
+
+  const laborRate = settings['loaded_labor_rate'] ?? 35.75;
+  const laborCost = totalHours * laborRate;
+  const paint     = finishGal * paintCost + primerGal * 34;
+  const sundries  = totalHours * (settings['sundries_per_hour'] ?? 3.5);
+  const travel    = (settings['mileage_rate'] ?? 0.333) * (job.miles || 0) * (job.days_on_site || 1);
+
+  const direct = laborCost + paint + sundries + travel;
+  const calculated = margin < 1 ? direct / (1 - margin) : direct;
+  const price = Math.max(calculated, minimum);
+
+  return {
+    rawHours: hours, multiplier: mult, fieldHours, totalHours,
+    manDays: totalHours / 8,
+    finishGal, primerGal, laborCost, paint, sundries, travel,
+    direct, calculated, price,
+    grossProfit: price - direct,
+    effectiveRate: totalHours ? price / totalHours : 0,
+  };
+}
