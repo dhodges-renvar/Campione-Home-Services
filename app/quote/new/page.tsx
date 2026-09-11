@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
 import { accentStyle } from '@/lib/theme';
@@ -11,8 +11,10 @@ import {
 
 const money = (n: number) => '$' + Math.round(n || 0).toLocaleString();
 
-export default function NewQuote() {
+function NewQuoteInner() {
   const router = useRouter();
+  const params = useSearchParams();
+  const leadId = params.get('lead');
   const [rates, setRates] = useState<Rate[]>([]);
   const [mods, setMods] = useState<Modifier[]>([]);
   const [settings, setSettings] = useState<Settings>({});
@@ -29,6 +31,22 @@ export default function NewQuote() {
     door_scope: 'door_full', window_scope: 'window_casing_sill',
     business_type: 'consumer', miles: 40, days_on_site: 3,
   });
+
+  useEffect(() => {
+    if (!leadId) return;
+    supabase.from('leads')
+      .select('contact_id,property_id,contacts(first_name,last_name,phone),properties(address_line1,city)')
+      .eq('id', leadId).single()
+      .then(({ data }: any) => {
+        if (!data) return;
+        setWho({
+          name: `${data.contacts?.first_name ?? ''} ${data.contacts?.last_name ?? ''}`.trim(),
+          phone: data.contacts?.phone ?? '',
+          address: data.properties?.address_line1 ?? '',
+          city: data.properties?.city ?? '',
+        });
+      });
+  }, [leadId]);
 
   useEffect(() => {
     (async () => {
@@ -89,6 +107,7 @@ export default function NewQuote() {
     }
 
     const { data: est } = await supabase.from('estimates').insert({
+      lead_id: leadId,
       contact_id: contactId, property_id: propertyId,
       division: 'painting', service_type: 'interior',
       business_type: job.business_type, status: 'draft',
@@ -242,5 +261,13 @@ export default function NewQuote() {
         )}
       </div>
     </Chrome>
+  );
+}
+
+export default function NewQuote() {
+  return (
+    <Suspense fallback={null}>
+      <NewQuoteInner />
+    </Suspense>
   );
 }

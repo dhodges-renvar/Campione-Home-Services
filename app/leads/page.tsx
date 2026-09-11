@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
+import { useRouter } from 'next/navigation';
 
 type Lead = {
   id: string; division: string; source_code: string; status: string;
@@ -13,6 +14,7 @@ type Lead = {
 const slaClass = (s: string) => s === 'ON TARGET' ? 'ok' : s === 'LATE' ? 'warn' : 'bad';
 
 export default function Leads() {
+  const router = useRouter();
   const [rows, setRows] = useState<Lead[]>([]);
   const [tab, setTab] = useState<'uncontacted' | 'all'>('uncontacted');
 
@@ -44,6 +46,7 @@ export default function Leads() {
           <h1>Leads</h1>
           <div className="sub">Whoever calls first usually wins.</div>
         </div>
+        <button className="barbtn" onClick={() => router.push('/leads/new')}>+ New</button>
       </div>
       <div className="chips" style={{ padding: '12px 18px 0' }}>
         <button className="chip" data-on={tab === 'uncontacted' ? '1' : '0'}
@@ -59,7 +62,7 @@ export default function Leads() {
           </div>
         ) : rows.map((l) => (
           <div className="lead" key={l.id}>
-            <div className="body">
+            <div className="body" onClick={() => router.push(`/leads/${l.id}`)} style={{ cursor: 'pointer' }}>
               <div className="t1">{l.customer?.trim() || 'Unknown caller'}</div>
               <div className="t2">
                 {l.division?.replace('_', ' ')} · {l.source_code?.replace(/_/g, ' ')} · {since(l.received_at)}
@@ -73,6 +76,11 @@ export default function Leads() {
             )}
           </div>
         ))}
+      </div>
+      <div className="dock">
+        <div className="inner">
+          <button className="btn" onClick={() => router.push('/leads/new')}>Log a new lead</button>
+        </div>
       </div>
     </Chrome>
   );
