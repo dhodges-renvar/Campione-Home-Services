@@ -17,17 +17,38 @@ export type Modifier = {
 };
 export type Settings = Record<string, number>;
 
+export type MeasureMode = 'rect' | 'perimeter' | 'walls';
+export type WallRun = { len: number; ht: number };
+
 export type Room = {
   key: string; name: string;
+  mode: MeasureMode;
+  /* rect */
   length: number; width: number; height: number;
+  /* perimeter: rep measures the total wall run directly — handles L-shapes,
+     open concept, bays, angled walls, anything that is not a box */
+  perimeterFt: number;
+  /* walls: one entry per run, each with its own height — handles two-story
+     foyers, half walls, and stairwells where heights differ */
+  wallRuns: WallRun[];
+  /* any mode: override when the ceiling footprint is not length x width */
+  ceilingSf: number | null;
+  /* LARGE openings only. Standard doors and windows are never deducted. */
+  deductSf: number;
+  /* gable or vault area above the plate line */
+  vaultAddSf: number;
   doors: number; windows: number; closets: number;
   walls: boolean; ceiling: boolean; base: boolean; crown: boolean;
   paintDoors: boolean; paintWindows: boolean; paintClosets: boolean;
+  notes?: string;
 };
 
 export const emptyRoom = (n = 1): Room => ({
   key: Math.random().toString(36).slice(2),
-  name: `Room ${n}`, length: 0, width: 0, height: 9,
+  name: `Room ${n}`, mode: 'rect',
+  length: 0, width: 0, height: 9,
+  perimeterFt: 0, wallRuns: [{ len: 0, ht: 9 }],
+  ceilingSf: null, deductSf: 0, vaultAddSf: 0,
   doors: 0, windows: 0, closets: 0,
   walls: true, ceiling: true, base: true, crown: false,
   paintDoors: true, paintWindows: true, paintClosets: false,
@@ -47,17 +68,52 @@ const mod = (mods: Modifier[], g: string, o: string) =>
   mods.find((m) => m.group_code === g && m.option_code === o);
 
 export function roomQuantities(r: Room) {
-  const perimeter = 2 * ((r.length || 0) + (r.width || 0));
+  let perimeter = 0;
+  let grossWallSF = 0;
+
+  if (r.mode === 'walls') {
+    const runs = (r.wallRuns || []).filter((w) => w.len > 0);
+    perimeter   = runs.reduce((s, w) => s + w.len, 0);
+    grossWallSF = runs.reduce((s, w) => s + w.len * (w.ht || r.height || 0), 0);
+  } else if (r.mode === 'perimeter') {
+    perimeter   = r.perimeterFt || 0;
+    grossWallSF = perimeter * (r.height || 0);
+  } else {
+    perimeter   = 2 * ((r.length || 0) + (r.width || 0));
+    grossWallSF = perimeter * (r.height || 0);
+  }
+
+  // vault/gable adds area; large openings subtract it
+  const netWallSF = Math.max(grossWallSF + (r.vaultAddSf || 0) - (r.deductSf || 0), 0);
+
+  const autoCeiling = r.mode === 'rect' ? (r.length || 0) * (r.width || 0) : 0;
+  const ceilingSF   = r.ceilingSf != null ? r.ceilingSf : autoCeiling;
+
   return {
     perimeter,
-    wallSF:    r.walls   ? perimeter * (r.height || 0) : 0,
-    ceilingSF: r.ceiling ? (r.length || 0) * (r.width || 0) : 0,
+    grossWallSF,
+    wallSF:    r.walls   ? netWallSF : 0,
+    ceilingSF: r.ceiling ? ceilingSF : 0,
     baseLF:    r.base    ? Math.max(perimeter - (r.doors || 0) * 3, 0) : 0,
     crownLF:   r.crown   ? perimeter : 0,
     doors:     r.paintDoors   ? (r.doors || 0)   : 0,
     windows:   r.paintWindows ? (r.windows || 0) : 0,
     closets:   r.paintClosets ? (r.closets || 0) : 0,
   };
+}
+
+/** Warn the estimator when a room looks measured wrong. */
+export function roomWarnings(r: Room): string[] {
+  const q = roomQuantities(r);
+  const out: string[] = [];
+  if (r.walls && q.wallSF === 0) out.push('No wall area — check the measurements');
+  if (r.ceiling && q.ceilingSF === 0)
+    out.push('Ceiling is checked but no ceiling area. Enter it directly.');
+  if (r.deductSf > 0 && r.deductSf > q.grossWallSF * 0.4)
+    out.push('Deduction is over 40% of the wall area — is that right?');
+  if (r.mode === 'rect' && r.height > 12)
+    out.push('Ceiling over 12 ft — consider wall-by-wall so heights are separate');
+  return out;
 }
 
 export function laborMultiplier(mods: Modifier[], s: JobSettings) {

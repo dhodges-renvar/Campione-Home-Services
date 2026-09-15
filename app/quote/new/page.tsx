@@ -5,8 +5,8 @@ import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
 import { accentStyle } from '@/lib/theme';
 import {
-  Room, emptyRoom, roomQuantities, priceEstimate,
-  JobSettings, Rate, Modifier, Settings,
+  Room, emptyRoom, roomQuantities, roomWarnings, priceEstimate,
+  JobSettings, Rate, Modifier, Settings, MeasureMode,
 } from '@/lib/pricing';
 
 const money = (n: number) => '$' + Math.round(n || 0).toLocaleString();
@@ -122,6 +122,10 @@ function NewQuoteInner() {
     if (est) {
       await supabase.from('estimate_rooms').insert(rooms.map((r, i) => ({
         estimate_id: est.id, room_name: r.name,
+        mode: r.mode,
+        perimeter_ft: r.mode === 'perimeter' ? r.perimeterFt : null,
+        walls: r.mode === 'walls' ? r.wallRuns : null,
+        ceiling_sf: r.ceilingSf, deduct_sf: r.deductSf, vault_add_sf: r.vaultAddSf,
         length_ft: r.length, width_ft: r.width, ceiling_ht_ft: r.height,
         door_count: r.doors, window_count: r.windows, closet_count: r.closets,
         paint_walls: r.walls, paint_ceiling: r.ceiling, paint_base: r.base,
@@ -152,8 +156,9 @@ function NewQuoteInner() {
           </div>
 
           <div className="section-label">Rooms — measure, do not do math</div>
-          {rooms.map((r, i) => {
-            const q = roomQuantities(r);
+          {rooms.map((r) => {
+            const q2 = roomQuantities(r);
+            const warn = roomWarnings(r);
             return (
               <div className="roomcard" key={r.key}>
                 <div className="rname">
@@ -162,16 +167,64 @@ function NewQuoteInner() {
                     <button className="rmdel" onClick={() => setRooms((rs) => rs.filter((x) => x.key !== r.key))}>Remove</button>
                   )}
                 </div>
-                <div className="grid3">
-                  <div><label>Length</label><input type="number" inputMode="decimal" value={r.length || ''} onChange={(e) => setRoom(r.key, { length: +e.target.value })} /></div>
-                  <div><label>Width</label><input type="number" inputMode="decimal" value={r.width || ''} onChange={(e) => setRoom(r.key, { width: +e.target.value })} /></div>
-                  <div><label>Ceiling</label><input type="number" inputMode="decimal" value={r.height || ''} onChange={(e) => setRoom(r.key, { height: +e.target.value })} /></div>
+
+                <div className="chips" style={{ marginTop: 0, marginBottom: 14 }}>
+                  {([['rect','Four walls'],['perimeter','Measure the run'],['walls','Wall by wall']] as [MeasureMode,string][])
+                    .map(([m, lbl]) => (
+                      <button key={m} className="chip" data-on={r.mode === m ? '1' : '0'}
+                        onClick={() => setRoom(r.key, { mode: m })}>{lbl}</button>
+                  ))}
                 </div>
-                <div className="grid3" style={{ marginTop: 10 }}>
+
+                {r.mode === 'rect' && (
+                  <div className="grid3">
+                    <div><label>Length</label><input type="number" inputMode="decimal" value={r.length || ''} onChange={(e) => setRoom(r.key, { length: +e.target.value })} /></div>
+                    <div><label>Width</label><input type="number" inputMode="decimal" value={r.width || ''} onChange={(e) => setRoom(r.key, { width: +e.target.value })} /></div>
+                    <div><label>Ceiling</label><input type="number" inputMode="decimal" value={r.height || ''} onChange={(e) => setRoom(r.key, { height: +e.target.value })} /></div>
+                  </div>
+                )}
+
+                {r.mode === 'perimeter' && (
+                  <>
+                    <div className="grid3" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                      <div><label>Wall run (LF)</label><input type="number" inputMode="decimal" value={r.perimeterFt || ''} onChange={(e) => setRoom(r.key, { perimeterFt: +e.target.value })} /></div>
+                      <div><label>Ceiling ht</label><input type="number" inputMode="decimal" value={r.height || ''} onChange={(e) => setRoom(r.key, { height: +e.target.value })} /></div>
+                    </div>
+                    <div className="hintl" style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 8 }}>
+                      Walk the walls with a measuring wheel or laser. Works for L-shapes, open concept, bays and angles.
+                    </div>
+                  </>
+                )}
+
+                {r.mode === 'walls' && (
+                  <>
+                    {(r.wallRuns || []).map((w, wi) => (
+                      <div className="grid3" key={wi} style={{ gridTemplateColumns: '1fr 1fr auto', marginBottom: 8, alignItems: 'end' }}>
+                        <div><label>Wall {wi + 1} length</label>
+                          <input type="number" inputMode="decimal" value={w.len || ''}
+                            onChange={(e) => setRoom(r.key, { wallRuns: r.wallRuns.map((x, j) => j === wi ? { ...x, len: +e.target.value } : x) })} /></div>
+                        <div><label>Height</label>
+                          <input type="number" inputMode="decimal" value={w.ht || ''}
+                            onChange={(e) => setRoom(r.key, { wallRuns: r.wallRuns.map((x, j) => j === wi ? { ...x, ht: +e.target.value } : x) })} /></div>
+                        <button className="rmdel" style={{ paddingBottom: 14 }}
+                          onClick={() => setRoom(r.key, { wallRuns: r.wallRuns.filter((_, j) => j !== wi) })}>&times;</button>
+                      </div>
+                    ))}
+                    <button className="chip" onClick={() => setRoom(r.key, { wallRuns: [...(r.wallRuns || []), { len: 0, ht: r.height || 9 }] })}>
+                      + Add a wall
+                    </button>
+                    <div className="hintl" style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 8 }}>
+                      Each wall gets its own height. Use this for two-story foyers, half walls and stairwells.
+                    </div>
+                  </>
+                )}
+
+                <div className="grid3" style={{ marginTop: 12 }}>
                   <div><label>Doors</label><input type="number" inputMode="numeric" value={r.doors || ''} onChange={(e) => setRoom(r.key, { doors: +e.target.value })} /></div>
                   <div><label>Windows</label><input type="number" inputMode="numeric" value={r.windows || ''} onChange={(e) => setRoom(r.key, { windows: +e.target.value })} /></div>
                   <div><label>Closets</label><input type="number" inputMode="numeric" value={r.closets || ''} onChange={(e) => setRoom(r.key, { closets: +e.target.value })} /></div>
                 </div>
+
                 <div className="chips">
                   {([['walls','Walls'],['ceiling','Ceiling'],['base','Base'],['crown','Crown'],
                      ['paintDoors','Doors'],['paintWindows','Window trim'],['paintClosets','Closets']] as const).map(([k, lbl]) => (
@@ -179,9 +232,32 @@ function NewQuoteInner() {
                       onClick={() => setRoom(r.key, { [k]: !(r as any)[k] } as any)}>{lbl}</button>
                   ))}
                 </div>
+
+                <details style={{ marginTop: 12 }}>
+                  <summary style={{ fontSize: 14, fontWeight: 650, color: 'var(--ink-3)', cursor: 'pointer' }}>
+                    Adjustments
+                  </summary>
+                  <div className="grid3" style={{ marginTop: 10 }}>
+                    <div><label>Ceiling SF</label>
+                      <input type="number" inputMode="decimal" placeholder={r.mode === 'rect' ? 'auto' : 'enter'}
+                        value={r.ceilingSf ?? ''} onChange={(e) => setRoom(r.key, { ceilingSf: e.target.value === '' ? null : +e.target.value })} /></div>
+                    <div><label>Vault add SF</label>
+                      <input type="number" inputMode="decimal" value={r.vaultAddSf || ''} onChange={(e) => setRoom(r.key, { vaultAddSf: +e.target.value })} /></div>
+                    <div><label>Deduct SF</label>
+                      <input type="number" inputMode="decimal" value={r.deductSf || ''} onChange={(e) => setRoom(r.key, { deductSf: +e.target.value })} /></div>
+                  </div>
+                  <div className="hintl" style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 8 }}>
+                    Deduct only large openings — pass-throughs, missing walls, sliders, fireplaces.
+                    Never deduct doors or windows; cut-in labor offsets the paint saved and they are already priced separately.
+                  </div>
+                </details>
+
                 <div className="t2" style={{ marginTop: 12 }}>
-                  {Math.round(q.wallSF)} sf walls · {Math.round(q.ceilingSF)} sf ceiling · {Math.round(q.baseLF)} lf base
+                  {Math.round(q2.wallSF)} sf walls · {Math.round(q2.ceilingSF)} sf ceiling · {Math.round(q2.baseLF)} lf base · {Math.round(q2.perimeter)} lf perimeter
                 </div>
+                {warn.map((w, i2) => (
+                  <div key={i2} style={{ marginTop: 8, fontSize: 13.5, fontWeight: 620, color: 'var(--amber)' }}>{w}</div>
+                ))}
               </div>
             );
           })}
