@@ -1,87 +1,142 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
-import { useRouter } from 'next/navigation';
-
-type Lead = {
-  id: string; division: string; source_code: string; status: string;
-  received_at: string; first_contact_at: string | null;
-  minutes_to_contact: number | null; sla: string;
-  customer: string | null; phone: string | null;
-};
 
 const slaClass = (s: string) => s === 'ON TARGET' ? 'ok' : s === 'LATE' ? 'warn' : 'bad';
+const since = (iso: string) => {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 60) return `${m}m ago`;
+  if (m < 1440) return `${Math.round(m / 60)}h ago`;
+  return `${Math.round(m / 1440)}d ago`;
+};
 
-export default function Leads() {
+function LeadsInner() {
   const router = useRouter();
-  const [rows, setRows] = useState<Lead[]>([]);
-  const [tab, setTab] = useState<'uncontacted' | 'all'>('uncontacted');
+  const params = useSearchParams();
+  const [tab, setTab] = useState<'leads' | 'builders'>(
+    params.get('tab') === 'builders' ? 'builders' : 'leads');
 
-  async function load() {
-    const view = tab === 'uncontacted' ? 'v_leads_needing_contact' : 'v_speed_to_lead';
-    const { data } = await supabase.from(view).select('*').limit(100);
-    setRows((data as any) || []);
-  }
-  useEffect(() => { load(); }, [tab]);
+  // leads
+  const [leadFilter, setLeadFilter] = useState<'uncontacted' | 'all'>('uncontacted');
+  const [leads, setLeads] = useState<any[]>([]);
+  // builders
+  const [q, setQ] = useState('');
+  const [kind, setKind] = useState('all');
+  const [pros, setPros] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
 
-  async function logCall(l: Lead) {
+  useEffect(() => {
+    if (tab !== 'leads') return;
+    const view = leadFilter === 'uncontacted' ? 'v_leads_needing_contact' : 'v_speed_to_lead';
+    supabase.from(view).select('*').limit(100).then(({ data }) => setLeads(data || []));
+  }, [tab, leadFilter]);
+
+  useEffect(() => {
+    if (tab !== 'builders') return;
+    let req = supabase.from('prospects')
+      .select('id,company,contact_name,city,phone,email,status,kind,source,rating', { count: 'exact' })
+      .order('company').limit(60);
+    if (kind !== 'all') req = req.eq('kind', kind);
+    if (q.trim().length >= 2) req = req.ilike('company', `%${q.trim()}%`);
+    req.then(({ data, count }) => { setPros(data || []); setTotal(count || 0); });
+  }, [tab, q, kind]);
+
+  async function logCall(leadId: string) {
     await supabase.from('lead_activities').insert({
-      lead_id: l.id, kind: 'outbound_call', occurred_at: new Date().toISOString(),
-    });
-    setTimeout(load, 400);
+      lead_id: leadId, kind: 'outbound_call', occurred_at: new Date().toISOString() });
   }
-
-  const since = (iso: string) => {
-    const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-    if (m < 60) return `${m}m ago`;
-    if (m < 1440) return `${Math.round(m / 60)}h ago`;
-    return `${Math.round(m / 1440)}d ago`;
-  };
 
   return (
     <Chrome>
       <div className="bar">
         <div>
-          <h1>Leads</h1>
-          <div className="sub">Whoever calls first usually wins.</div>
-        </div>
-        <button className="barbtn" onClick={() => router.push('/leads/new')}>+ New</button>
-      </div>
-      <div className="chips" style={{ padding: '12px 18px 0' }}>
-        <button className="chip" data-on={tab === 'uncontacted' ? '1' : '0'}
-          onClick={() => setTab('uncontacted')}>Needs a call</button>
-        <button className="chip" data-on={tab === 'all' ? '1' : '0'}
-          onClick={() => setTab('all')}>All</button>
-      </div>
-      <div className="main">
-        {rows.length === 0 ? (
-          <div className="empty">
-            <strong>Nobody waiting</strong>
-            Every lead has been contacted.
+          <h1>{tab === 'leads' ? 'Leads' : 'Builders'}</h1>
+          <div className="sub">
+            {tab === 'leads' ? 'Whoever calls first usually wins.' : `${total} in the database`}
           </div>
-        ) : rows.map((l) => (
-          <div className="lead" key={l.id}>
-            <div className="body" onClick={() => router.push(`/leads/${l.id}`)} style={{ cursor: 'pointer' }}>
-              <div className="t1">{l.customer?.trim() || 'Unknown caller'}</div>
-              <div className="t2">
-                {l.division?.replace('_', ' ')} · {l.source_code?.replace(/_/g, ' ')} · {since(l.received_at)}
+        </div>
+        <button className="barbtn"
+          onClick={() => router.push(tab === 'leads' ? '/leads/new' : '/prospects/new')}>+ New</button>
+      </div>
+
+      <div className="chips" style={{ padding: '14px 20px 0' }}>
+        <button className="chip" data-on={tab === 'leads' ? '1' : '0'} onClick={() => setTab('leads')}>Leads</button>
+        <button className="chip" data-on={tab === 'builders' ? '1' : '0'} onClick={() => setTab('builders')}>Builders</button>
+      </div>
+
+      {tab === 'leads' ? (
+        <>
+          <div className="chips" style={{ padding: '10px 20px 0' }}>
+            <button className="chip" data-on={leadFilter === 'uncontacted' ? '1' : '0'}
+              onClick={() => setLeadFilter('uncontacted')}>Needs a call</button>
+            <button className="chip" data-on={leadFilter === 'all' ? '1' : '0'}
+              onClick={() => setLeadFilter('all')}>All</button>
+          </div>
+          <div className="main">
+            {leads.length === 0 ? (
+              <div className="empty"><strong>Nobody waiting</strong>Every lead has been contacted.</div>
+            ) : leads.map((l) => (
+              <div className="lead" key={l.id}>
+                <div className="body" style={{ cursor: 'pointer' }} onClick={() => router.push(`/leads/${l.id}`)}>
+                  <div className="t1">{l.customer?.trim() || 'Unknown caller'}</div>
+                  <div className="t2">
+                    {l.division?.replace('_', ' ')} · {l.source_code?.replace(/_/g, ' ')} · {since(l.received_at)}
+                  </div>
+                  <div style={{ marginTop: 8 }}><span className={`sla ${slaClass(l.sla)}`}>{l.sla}</span></div>
+                </div>
+                {l.phone && <a className="callbtn" href={`tel:${l.phone}`} onClick={() => logCall(l.id)}>Call</a>}
               </div>
-              <div style={{ marginTop: 8 }}>
-                <span className={`sla ${slaClass(l.sla)}`}>{l.sla}</span>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="field" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by company" />
+          </div>
+          <div className="chips" style={{ padding: '12px 20px 0' }}>
+            {[['all','All'],['home_builder','Builders'],['remodeler','Remodelers'],
+              ['general_contractor','GCs'],['property_manager','Property mgrs']].map(([v, l]) => (
+              <button key={v} className="chip" data-on={kind === v ? '1' : '0'}
+                onClick={() => setKind(v)}>{l}</button>
+            ))}
+          </div>
+          <div className="main">
+            {pros.length === 0 ? (
+              <div className="empty">
+                <strong>Nothing here yet</strong>
+                Add one with the button up top, or import the GAHBA list.
               </div>
-            </div>
-            {l.phone && (
-              <a className="callbtn" href={`tel:${l.phone}`} onClick={() => logCall(l)}>Call</a>
+            ) : pros.map((p) => (
+              <div className="lead" key={p.id}>
+                <div className="body" style={{ cursor: 'pointer' }} onClick={() => router.push(`/prospects/${p.id}`)}>
+                  <div className="t1">{p.company}</div>
+                  <div className="t2">
+                    {[p.contact_name, p.city].filter(Boolean).join(' · ')}
+                  </div>
+                  <div className="t2" style={{ marginTop: 3 }}>
+                    {p.status?.replace(/_/g, ' ')}
+                    {p.rating ? ` · ${'\u2605'.repeat(p.rating)}` : ''}
+                    {p.source ? ` · ${p.source}` : ''}
+                  </div>
+                </div>
+                {p.phone && <a className="callbtn" href={`tel:${p.phone}`}>Call</a>}
+              </div>
+            ))}
+            {pros.length >= 60 && (
+              <div className="empty" style={{ padding: '24px' }}>
+                Showing the first 60. Search to narrow it down.
+              </div>
             )}
           </div>
-        ))}
-      </div>
-      <div className="dock">
-        <div className="inner">
-          <button className="btn" onClick={() => router.push('/leads/new')}>Log a new lead</button>
-        </div>
-      </div>
+        </>
+      )}
     </Chrome>
   );
+}
+
+export default function Leads() {
+  return <Suspense fallback={null}><LeadsInner /></Suspense>;
 }

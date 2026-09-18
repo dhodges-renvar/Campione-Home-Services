@@ -1,12 +1,13 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { IconToday, IconQuote, IconLeads, IconNumbers, IconSetup } from './Glyphs';
+import { IconToday, IconQuote, IconLeads, IconNumbers, IconSetup, IconBuilders } from './Glyphs';
 
 const TABS = [
   { href: '/today',     en: 'Today',   es: 'Hoy',      Icon: IconToday,   roles: ['owner','admin','estimator','crew_lead','sub'] },
   { href: '/quote',     en: 'Quote',   es: 'Cotizar',  Icon: IconQuote,   roles: ['owner','admin','estimator'] },
   { href: '/leads',     en: 'Leads',   es: 'Clientes', Icon: IconLeads,   roles: ['owner','admin','estimator'] },
+  { href: '/prospects', en: 'Builders',es: 'Empresas', Icon: IconBuilders,roles: ['owner','admin','estimator'] },
   { href: '/dashboard', en: 'Numbers', es: 'Numeros',  Icon: IconNumbers, roles: ['owner','admin'] },
   { href: '/setup',     en: 'Setup',   es: 'Ajustes',  Icon: IconSetup,   roles: ['owner','admin'] },
 ];
