@@ -67,7 +67,10 @@ export default function ProspectDetail() {
         <button className="back" onClick={() => router.push('/leads?tab=builders')}>{'\u2190'} Builders</button>
         <div>
           <h1>{p.company}</h1>
-          <div className="sub">{p.city}{p.state ? `, ${p.state}` : ''} · {p.source}</div>
+          <div className="sub">
+            {[p.segment, p.city, p.priority ? `Priority ${p.priority}` : null]
+              .filter(Boolean).join(' · ')}
+          </div>
         </div>
       </div>
 
@@ -124,6 +127,18 @@ export default function ProspectDetail() {
           <button className="btn ghost" style={{ marginTop: 12 }} disabled={!note.trim()}
             onClick={() => { log('note', note); setNote(''); }}>Save note</button>
         </div>
+
+        {(p.entry_point || p.scale_signal || p.next_ask) && (
+          <>
+            <div className="section-label">How to get in</div>
+            {p.scale_signal && <div className="field"><label>Scale</label>
+              <div className="t2">{p.scale_signal}</div></div>}
+            {p.entry_point && <div className="field"><label>Best entry point</label>
+              <div className="t2">{p.entry_point}</div></div>}
+            {p.next_ask && <div className="field"><label>The ask</label>
+              <div className="t2">{p.next_ask}</div></div>}
+          </>
+        )}
 
         {p.notes && <><div className="section-label">Background</div>
           <div className="field"><div className="t2" style={{ whiteSpace: 'pre-wrap' }}>{p.notes}</div></div></>}

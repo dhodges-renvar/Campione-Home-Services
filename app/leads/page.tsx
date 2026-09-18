@@ -36,9 +36,11 @@ function LeadsInner() {
   useEffect(() => {
     if (tab !== 'builders') return;
     let req = supabase.from('prospects')
-      .select('id,company,contact_name,city,phone,email,status,kind,source,rating', { count: 'exact' })
-      .order('company').limit(60);
-    if (kind !== 'all') req = req.eq('kind', kind);
+      .select('id,company,contact_name,city,phone,email,status,kind,segment,priority,source,rating,needs_enrichment',
+              { count: 'exact' })
+      .order('priority', { nullsFirst: false }).order('company').limit(60);
+    if (kind === '__enrich') req = req.eq('needs_enrichment', true);
+    else if (kind !== 'all') req = req.eq('kind', kind);
     if (q.trim().length >= 2) req = req.ilike('company', `%${q.trim()}%`);
     req.then(({ data, count }) => { setPros(data || []); setTotal(count || 0); });
   }, [tab, q, kind]);
@@ -97,8 +99,9 @@ function LeadsInner() {
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by company" />
           </div>
           <div className="chips" style={{ padding: '12px 20px 0' }}>
-            {[['all','All'],['home_builder','Builders'],['remodeler','Remodelers'],
-              ['general_contractor','GCs'],['property_manager','Property mgrs']].map(([v, l]) => (
+            {[['all','All'],['home_builder','Builders'],['property_manager','Property mgrs'],
+              ['remodeler','Remodelers'],['general_contractor','GCs'],
+              ['commercial','Commercial'],['__enrich','Needs research']].map(([v, l]) => (
               <button key={v} className="chip" data-on={kind === v ? '1' : '0'}
                 onClick={() => setKind(v)}>{l}</button>
             ))}
@@ -117,10 +120,16 @@ function LeadsInner() {
                     {[p.contact_name, p.city].filter(Boolean).join(' · ')}
                   </div>
                   <div className="t2" style={{ marginTop: 3 }}>
-                    {p.status?.replace(/_/g, ' ')}
+                    {p.priority && <span className="sla ok" style={{ marginRight: 8 }}>{p.priority}</span>}
+                    {p.segment || p.kind?.replace(/_/g, ' ')}
+                    {' · '}{p.status?.replace(/_/g, ' ')}
                     {p.rating ? ` · ${'\u2605'.repeat(p.rating)}` : ''}
-                    {p.source ? ` · ${p.source}` : ''}
                   </div>
+                  {p.needs_enrichment && (
+                    <div className="t2" style={{ color: 'var(--amber)', fontWeight: 620, marginTop: 4 }}>
+                      No phone or email yet
+                    </div>
+                  )}
                 </div>
                 {p.phone && <a className="callbtn" href={`tel:${p.phone}`}>Call</a>}
               </div>
