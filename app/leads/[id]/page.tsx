@@ -19,6 +19,35 @@ export default function LeadDetail() {
   const [booking, setBooking] = useState(false);
   const [when, setWhen] = useState('');
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 1600); };
+  const [edit, setEdit] = useState(false);
+  const [cf, setCf] = useState<any>({});
+
+  function startEdit() {
+    const c = lead?.contacts || {}; const pr = lead?.properties || {};
+    setCf({ first: c.first_name ?? '', last: c.last_name ?? '', phone: c.phone ?? '',
+            email: c.email ?? '', address: pr.address_line1 ?? '', city: pr.city ?? '',
+            zip: pr.postal_code ?? '' });
+    setEdit(true);
+  }
+
+  async function saveEdit() {
+    if (lead.contact_id) {
+      await supabase.from('contacts').update({
+        first_name: cf.first || null, last_name: cf.last || null,
+        phone: cf.phone || null, email: cf.email || null }).eq('id', lead.contact_id);
+    }
+    if (lead.property_id) {
+      await supabase.from('properties').update({
+        address_line1: cf.address || null, city: cf.city || null,
+        postal_code: cf.zip || null }).eq('id', lead.property_id);
+    } else if (cf.address) {
+      const { data } = await supabase.from('properties')
+        .insert({ address_line1: cf.address, city: cf.city || null, postal_code: cf.zip || null })
+        .select('id').single();
+      if (data) await supabase.from('leads').update({ property_id: data.id }).eq('id', id);
+    }
+    setEdit(false); load(); flash('Saved');
+  }
 
   async function load() {
     const { data } = await supabase.from('leads')
@@ -74,10 +103,40 @@ export default function LeadDetail() {
             <h1>{name}</h1>
             <div className="sub">{p?.address_line1 ?? 'No address yet'}{p?.city ? `, ${p.city}` : ''}</div>
           </div>
+          {!edit && <button className="barbtn" onClick={startEdit}>Edit</button>}
         </div>
         <div className="divstrip" />
 
         <div className="main">
+          {edit && (
+            <>
+              <div className="section-label">Contact</div>
+              <div className="field">
+                <div className="grid3" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                  <div><label>First</label><input value={cf.first} onChange={(e) => setCf({ ...cf, first: e.target.value })} /></div>
+                  <div><label>Last</label><input value={cf.last} onChange={(e) => setCf({ ...cf, last: e.target.value })} /></div>
+                </div>
+              </div>
+              <div className="field"><label>Phone</label>
+                <input type="tel" inputMode="tel" value={cf.phone} onChange={(e) => setCf({ ...cf, phone: e.target.value })} /></div>
+              <div className="field"><label>Email</label>
+                <input inputMode="email" autoCapitalize="none" value={cf.email} onChange={(e) => setCf({ ...cf, email: e.target.value })} /></div>
+              <div className="section-label">Property</div>
+              <div className="field"><label>Address</label>
+                <input value={cf.address} onChange={(e) => setCf({ ...cf, address: e.target.value })} /></div>
+              <div className="field">
+                <div className="grid3" style={{ gridTemplateColumns: '2fr 1fr' }}>
+                  <div><label>City</label><input value={cf.city} onChange={(e) => setCf({ ...cf, city: e.target.value })} /></div>
+                  <div><label>Zip</label><input inputMode="numeric" value={cf.zip} onChange={(e) => setCf({ ...cf, zip: e.target.value })} /></div>
+                </div>
+              </div>
+              <div className="field" style={{ display: 'flex', gap: 10 }}>
+                <button className="btn ghost" onClick={() => setEdit(false)}>Cancel</button>
+                <button className="btn" onClick={saveEdit}>Save</button>
+              </div>
+            </>
+          )}
+
           <div className="setting">
             <label>Status</label>
             <select value={lead.status} onChange={(e) =>

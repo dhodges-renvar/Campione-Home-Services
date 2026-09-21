@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
+import PeoplePanel from '@/components/PeoplePanel';
 
 const STATUSES = ['new','researching','contacted','responded','meeting_set','quoting',
                   'won','not_interested','bad_fit','do_not_contact'];
@@ -15,6 +16,35 @@ export default function ProspectDetail() {
   const [note, setNote] = useState('');
   const [toast, setToast] = useState('');
   const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 1500); };
+  const [edit, setEdit] = useState(false);
+  const [ef, setEf] = useState<any>({});
+  const [conflict, setConflict] = useState('');
+
+  function startEdit() {
+    setConflict('');
+    setEf({ company: p.company ?? '', phone: p.phone ?? '', email: p.email ?? '',
+            website: p.website ?? '', address_line1: p.address_line1 ?? '',
+            city: p.city ?? '', postal_code: p.postal_code ?? '', kind: p.kind,
+            segment: p.segment ?? '' });
+    setEdit(true);
+  }
+
+  async function saveEdit() {
+    setConflict('');
+    const { data: hits } = await supabase.rpc('check_prospect_conflict', {
+      p_id: id, p_company: ef.company || null,
+      p_phone: ef.phone || null, p_email: ef.email || null });
+    if (hits && hits.length) {
+      const h = hits[0];
+      setConflict(`That ${h.field} already belongs to ${h.other_company}.`);
+      return;
+    }
+    const patch: any = {};
+    for (const k of Object.keys(ef)) patch[k] = ef[k] === '' ? null : ef[k];
+    const { error } = await supabase.from('prospects').update(patch).eq('id', id);
+    if (error) { setConflict(error.message); return; }
+    setP((x: any) => ({ ...x, ...patch })); setEdit(false); flash('Saved');
+  }
 
   async function load() {
     const { data } = await supabase.from('prospects').select('*').eq('id', id).single();
@@ -72,9 +102,41 @@ export default function ProspectDetail() {
               .filter(Boolean).join(' · ')}
           </div>
         </div>
+        {!edit && <button className="barbtn" onClick={startEdit}>Edit</button>}
       </div>
 
       <div className="main">
+        {edit && (
+          <>
+            <div className="section-label">Company</div>
+            {([['company','Company name'],['phone','Main phone'],['email','General email'],
+               ['website','Website'],['address_line1','Address'],['city','City'],['postal_code','Zip']] as const)
+              .map(([k, lbl]) => (
+                <div className="field" key={k}>
+                  <label>{lbl}</label>
+                  <input value={ef[k]} onChange={(e) => setEf({ ...ef, [k]: e.target.value })}
+                    inputMode={k==='phone'?'tel':k==='email'?'email':k==='postal_code'?'numeric':undefined}
+                    autoCapitalize={k==='email'||k==='website'?'none':'words'} />
+                </div>
+            ))}
+            <div className="setting">
+              <label>Type</label>
+              <select value={ef.kind} onChange={(e) => setEf({ ...ef, kind: e.target.value })}>
+                {['home_builder','remodeler','general_contractor','property_manager','realtor','commercial','other']
+                  .map((k) => <option key={k} value={k}>{k.replace(/_/g,' ')}</option>)}
+              </select>
+            </div>
+            {conflict && (
+              <div style={{ background: 'var(--no-bg)', color: 'var(--no)', padding: '14px 20px',
+                            fontWeight: 650, fontSize: 14.5 }}>{conflict}</div>
+            )}
+            <div className="field" style={{ display: 'flex', gap: 10 }}>
+              <button className="btn ghost" onClick={() => setEdit(false)}>Cancel</button>
+              <button className="btn" onClick={saveEdit} disabled={!ef.company?.trim()}>Save</button>
+            </div>
+          </>
+        )}
+
         <div className="setting">
           <label>Status</label>
           <select value={p.status} onChange={(e) => setField({ status: e.target.value })}>
@@ -92,12 +154,11 @@ export default function ProspectDetail() {
           </div>
         </div>
 
-        {(p.contact_name || p.phone || p.email || p.address_line1) && (
+        <PeoplePanel prospectId={id} onLogged={(k, b) => log(k, b)} />
+
+        {(p.address_line1 || p.spotted_at) && (
           <>
-            <div className="section-label">Contact</div>
-            {p.contact_name && <div className="lead"><div className="body">
-              <div className="t1">{p.contact_name}</div>
-              {p.title && <div className="t2">{p.title}</div>}</div></div>}
+            <div className="section-label">Location</div>
             {p.address_line1 && <div className="lead"><div className="body">
               <div className="t2">{p.address_line1}</div>
               <div className="t2">{p.city}, {p.state} {p.postal_code}</div></div></div>}
@@ -106,6 +167,7 @@ export default function ProspectDetail() {
           </>
         )}
 
+        <div className="section-label">Company line</div>
         <div className="field">
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             {p.phone && <a className="btn ghost" style={{ flex: 1, minWidth: 120 }}
