@@ -18,6 +18,43 @@ const PANELS: [Panel, string, string][] = [
 
 const money = (n: any) => '$' + (Number(n) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 
+function WhoAmI() {
+  const [me, setMe] = useState<any>(null);
+  const [counts, setCounts] = useState<any>({});
+  useEffect(() => {
+    (async () => {
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) return;
+      const { data: row } = await supabase.from('app_users').select('full_name,role,email')
+        .eq('id', u.user.id).maybeSingle();
+      setMe({ email: u.user.email, ...(row || {}), hasRow: !!row });
+      const c: any = {};
+      for (const t of ['prospects', 'leads', 'jobs', 'estimates']) {
+        const { count, error } = await supabase.from(t).select('id', { count: 'exact', head: true });
+        c[t] = error ? 'blocked' : count;
+      }
+      setCounts(c);
+    })();
+  }, []);
+  if (!me) return null;
+  return (
+    <div className="field" style={{ background: 'var(--paper)', borderBottom: 'none' }}>
+      <label>This device</label>
+      <div className="t2">Signed in as <b>{me.email}</b></div>
+      <div className="t2">
+        Role: <b>{me.hasRow ? me.role : 'NO USER RECORD — ask an owner to add you'}</b>
+      </div>
+      <div className="t2" style={{ marginTop: 6 }}>
+        Can see — builders {counts.prospects ?? '…'} · leads {counts.leads ?? '…'} ·
+        jobs {counts.jobs ?? '…'} · quotes {counts.estimates ?? '…'}
+      </div>
+      <div className="t2" style={{ marginTop: 6 }}>
+        App build <b>{process.env.NEXT_PUBLIC_BUILD}</b> · {process.env.NEXT_PUBLIC_BUILT_AT} UTC
+      </div>
+    </div>
+  );
+}
+
 export default function Setup() {
   const [panel, setPanel] = useState<Panel | null>(null);
   const [toast, setToast] = useState('');
@@ -40,6 +77,7 @@ export default function Setup() {
             <div className="t2">{sub}</div>
           </button>
         ))}
+        {!panel && <WhoAmI />}
         {panel === 'margins'    && <Margins flash={flash} />}
         {panel === 'paint'      && <Paint flash={flash} />}
         {panel === 'rates'      && <Rates flash={flash} />}

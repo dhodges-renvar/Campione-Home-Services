@@ -21,16 +21,20 @@ function LeadsInner() {
   // leads
   const [leadFilter, setLeadFilter] = useState<'uncontacted' | 'all'>('uncontacted');
   const [leads, setLeads] = useState<any[]>([]);
+  const [leadsErr, setLeadsErr] = useState('');
   // builders
   const [q, setQ] = useState('');
   const [kind, setKind] = useState('all');
   const [pros, setPros] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
+  const [loadErr, setLoadErr] = useState('');
 
   useEffect(() => {
     if (tab !== 'leads') return;
     const view = leadFilter === 'uncontacted' ? 'v_leads_needing_contact' : 'v_speed_to_lead';
-    supabase.from(view).select('*').limit(100).then(({ data }) => setLeads(data || []));
+    supabase.from(view).select('*').limit(100).then(({ data, error }) => {
+      setLeadsErr(error ? error.message : ''); setLeads(data || []);
+    });
   }, [tab, leadFilter]);
 
   useEffect(() => {
@@ -42,7 +46,19 @@ function LeadsInner() {
     if (kind === '__enrich') req = req.eq('needs_enrichment', true);
     else if (kind !== 'all') req = req.eq('kind', kind);
     if (q.trim().length >= 2) req = req.ilike('company', `%${q.trim()}%`);
-    req.then(({ data, count }) => { setPros(data || []); setTotal(count || 0); });
+    req.then(({ data, count, error }) => {
+      if (error) {
+        setPros([]); setTotal(0);
+        setLoadErr(
+          /column .* does not exist/i.test(error.message)
+            ? 'The database is missing columns this screen needs. Run campione_prospects_v2.sql, then reload.'
+            : /permission|policy|rls/i.test(error.message)
+            ? 'Your account does not have access to builders. Ask an owner to set your role to owner, admin or estimator.'
+            : error.message);
+        return;
+      }
+      setLoadErr(''); setPros(data || []); setTotal(count || 0);
+    });
   }, [tab, q, kind]);
 
   async function logCall(leadId: string) {
@@ -77,7 +93,10 @@ function LeadsInner() {
               onClick={() => setLeadFilter('all')}>All</button>
           </div>
           <div className="main">
-            {leads.length === 0 ? (
+            {leadsErr ? (
+              <div className="empty"><strong>Could not load leads</strong>
+                <span style={{ display: 'block', marginTop: 8, color: 'var(--no)', fontWeight: 600 }}>{leadsErr}</span></div>
+            ) : leads.length === 0 ? (
               <div className="empty"><strong>Nobody waiting</strong>Every lead has been contacted.</div>
             ) : leads.map((l) => (
               <div className="lead" key={l.id}>
@@ -107,10 +126,15 @@ function LeadsInner() {
             ))}
           </div>
           <div className="main">
-            {pros.length === 0 ? (
+            {loadErr ? (
+              <div className="empty">
+                <strong>Could not load builders</strong>
+                <span style={{ display: 'block', marginTop: 8, color: 'var(--no)', fontWeight: 600 }}>{loadErr}</span>
+              </div>
+            ) : pros.length === 0 ? (
               <div className="empty">
                 <strong>Nothing here yet</strong>
-                Add one with the button up top, or import the GAHBA list.
+                {q || kind !== 'all' ? 'Nothing matches that filter.' : 'Add one with the button up top, or import the GAHBA list.'}
               </div>
             ) : pros.map((p) => (
               <div className="lead" key={p.id}>
