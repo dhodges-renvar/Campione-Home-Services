@@ -98,7 +98,7 @@ export default function LeadDetail() {
     <Chrome>
       <div style={accentStyle(lead.division)}>
         <div className="bar">
-          <button className="back" onClick={() => router.push('/leads')}>{'\u2190'} Leads</button>
+          <button className="back" onClick={() => router.push('/leads')}>{'\u2190'} B2C</button>
           <div>
             <h1>{name}</h1>
             <div className="sub">{p?.address_line1 ?? 'No address yet'}{p?.city ? `, ${p.city}` : ''}</div>

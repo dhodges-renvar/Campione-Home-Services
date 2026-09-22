@@ -71,7 +71,7 @@ export default function NewProspect() {
   return (
     <Chrome>
       <div className="bar">
-        <button className="back" onClick={() => router.push('/prospects')}>{'\u2190'} Builders</button>
+        <button className="back" onClick={() => router.push('/prospects')}>{'\u2190'} B2B</button>
         <div><h1>Add a builder</h1><div className="sub">Company name is enough to start</div></div>
       </div>
 

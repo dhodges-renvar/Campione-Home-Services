@@ -82,7 +82,7 @@ export default function Dashboard() {
         {!k ? null : (
           <>
             <div className="tiles">
-              <Tile label="New leads" value={k.leads_new}
+              <Tile label="New B2C leads" value={k.leads_new}
                 sub={k.median_response_min != null ? `${num(k.median_response_min)}m to first call` : 'no responses yet'}
                 tone={Number(k.leads_uncontacted) > 0 ? 'warn' : ''} onClick={() => router.push('/leads')} />
               <Tile label="Appointments" value={k.appts_booked} sub={`${k.appts_upcoming} upcoming`} />

@@ -54,7 +54,7 @@ export default function NewLead() {
   return (
     <Chrome>
       <div className="bar">
-        <button className="back" onClick={() => router.push('/leads')}>{'\u2190'} Leads</button>
+        <button className="back" onClick={() => router.push('/leads')}>{'\u2190'} B2C</button>
         <div><h1>New lead</h1><div className="sub">Log it the moment the phone rings</div></div>
       </div>
       <div className="main">

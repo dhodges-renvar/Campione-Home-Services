@@ -94,7 +94,7 @@ export default function ProspectDetail() {
   return (
     <Chrome>
       <div className="bar">
-        <button className="back" onClick={() => router.push('/prospects')}>{'\u2190'} Builders</button>
+        <button className="back" onClick={() => router.push('/prospects')}>{'\u2190'} B2B</button>
         <div>
           <h1>{p.company}</h1>
           <div className="sub">

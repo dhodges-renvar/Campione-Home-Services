@@ -47,8 +47,10 @@ export default function Builders() {
     <Chrome>
       <div className="bar">
         <div>
-          <h1>Builders</h1>
-          <div className="sub">{loading ? 'Loading…' : `${total} in the database`}</div>
+          <h1>B2B</h1>
+          <div className="sub">
+            {loading ? 'Loading…' : `Builders, property managers, GCs · ${total} in the database`}
+          </div>
         </div>
         <button className="barbtn" onClick={() => router.push('/prospects/new')}>+ New</button>
       </div>

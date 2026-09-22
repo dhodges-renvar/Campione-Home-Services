@@ -34,8 +34,8 @@ export default function Leads() {
     <Chrome>
       <div className="bar">
         <div>
-          <h1>Leads</h1>
-          <div className="sub">Whoever calls first usually wins.</div>
+          <h1>B2C</h1>
+          <div className="sub">Homeowners. Whoever calls first usually wins.</div>
         </div>
         <button className="barbtn" onClick={() => router.push('/leads/new')}>+ New</button>
       </div>
