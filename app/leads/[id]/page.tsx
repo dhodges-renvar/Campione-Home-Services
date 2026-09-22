@@ -4,6 +4,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
 import { accentStyle } from '@/lib/theme';
+import FollowUpForm from '@/components/FollowUpForm';
 
 const STATUSES = ['new','contacted','estimate_scheduled','estimated','won','lost','dead'];
 const LOST = ['price','went with someone else','no response','out of area','not ready','wrong scope'];
@@ -194,6 +195,10 @@ export default function LeadDetail() {
               <button className="btn ghost" onClick={() => setBooking(true)}>Book an estimate</button>
             </div>
           )}
+
+          <div className="section-label">Next step</div>
+          <FollowUpForm leadId={id} phone={c?.phone}
+            defaultTitle={`Call ${name}`} onSaved={() => flash('Follow-up set')} />
 
           <div className="section-label">Add a note</div>
           <div className="field">

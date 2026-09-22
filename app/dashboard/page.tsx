@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [appts, setAppts] = useState<any[]>([]);
   const [qc, setQc] = useState<any[]>([]);
   const [pl, setPl] = useState<any[]>([]);
+  const [overdue, setOverdue] = useState<any[]>([]);
   const [open, setOpen] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,6 +32,8 @@ export default function Dashboard() {
     supabase.from('v_appointments_upcoming').select('*').limit(10).then(({ data }) => setAppts(data || []));
     supabase.from('v_qc_exceptions').select('*').limit(10).then(({ data }) => setQc(data || []));
     supabase.from('v_division_pl').select('*').then(({ data }) => setPl(data || []));
+    supabase.from('v_my_followups').select('*').eq('overdue', true).limit(15)
+      .then(({ data }) => setOverdue(data || []));
   }, []);
 
   const Tile = ({ label, value, sub, tone, onClick }: any) => (
@@ -72,6 +75,11 @@ export default function Dashboard() {
           <div className="alert">
             {qc.length} job{qc.length === 1 ? '' : 's'} failed quality control
           </div>
+        )}
+        {overdue.length > 0 && (
+          <button className="alert warn" onClick={() => router.push('/today')}>
+            {overdue.length} follow-up{overdue.length === 1 ? '' : 's'} past due
+          </button>
         )}
         {k && Number(k.leads_uncontacted) > 0 && (
           <button className="alert warn" onClick={() => router.push('/leads')}>
@@ -158,6 +166,21 @@ export default function Dashboard() {
                     <div className="t2">{q.sub_company || q.submitted_by} · {q.fail_count} item{q.fail_count === 1 ? '' : 's'} failed</div>
                   </div>
                   <span className="sla bad">failed</span>
+                </div>
+              ))}
+            </Section>
+
+            <Section id="fu" title="Follow-ups past due" count={overdue.length}>
+              {overdue.map((o) => (
+                <div className="lead" key={o.id}>
+                  <div className="body">
+                    <div className="t1">{o.title}</div>
+                    <div className="t2">{[o.about, o.assigned_name].filter(Boolean).join(' · ')}</div>
+                    <div className="t2">
+                      due {new Date(o.due_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric' })}
+                    </div>
+                  </div>
+                  <span className="sla bad">late</span>
                 </div>
               ))}
             </Section>

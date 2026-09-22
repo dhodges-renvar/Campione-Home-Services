@@ -6,6 +6,7 @@ import { startFlushLoop, pending } from '@/lib/queue';
 import { t, useLang } from '@/lib/i18n';
 import OfflineBar from '@/components/OfflineBar';
 import Chrome from '@/components/Chrome';
+import { downloadReminder } from '@/lib/ics';
 import { divisionColor } from '@/lib/theme';
 
 type Job = {
@@ -23,6 +24,28 @@ export default function Today() {
   const [queued, setQueued] = useState(0);
   const [qcReady, setQcReady] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [todos, setTodos] = useState<any[]>([]);
+
+  async function loadTodos() {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    const { data } = await supabase.from('v_my_followups').select('*')
+      .eq('assigned_to', u.user.id)
+      .lte('due_at', new Date(Date.now() + 36 * 3600 * 1000).toISOString())
+      .limit(20);
+    setTodos(data || []);
+  }
+
+  async function closeTodo(id: string) {
+    await supabase.from('follow_ups').update({ status: 'done' }).eq('id', id);
+    setTodos((t) => t.filter((x) => x.id !== id));
+  }
+
+  async function snooze(id: string, hours: number) {
+    const d = new Date(Date.now() + hours * 3600 * 1000);
+    await supabase.from('follow_ups').update({ due_at: d.toISOString() }).eq('id', id);
+    loadTodos();
+  }
 
   useEffect(() => {
     startFlushLoop();
@@ -43,6 +66,7 @@ export default function Today() {
         .from('checklist_submissions').select('job_id').is('submitted_at', null);
       setQcReady(new Set((cs || []).map((r: any) => r.job_id)));
       setLoading(false);
+      loadTodos();
     })();
   }, [router]);
 
@@ -60,6 +84,41 @@ export default function Today() {
       <OfflineBar />
       {queued > 0 && <div className="offline">{queued} photo{queued > 1 ? 's' : ''} waiting to send</div>}
       <div className="main">
+        {todos.length > 0 && (
+          <>
+            <div className="section-label">
+              Follow up{todos.some((t) => t.overdue) ? ' — some are overdue' : ''}
+            </div>
+            {todos.map((td) => (
+              <div className="lead" key={td.id}
+                   style={{ borderLeft: `4px solid ${td.overdue ? 'var(--no)' : 'var(--accent)'}` }}>
+                <div className="body">
+                  <div className="t1">{td.title}</div>
+                  <div className="t2">
+                    {[td.about, td.person].filter(Boolean).join(' · ')}
+                  </div>
+                  <div className="t2" style={{ color: td.overdue ? 'var(--no)' : 'var(--ink-3)',
+                                               fontWeight: td.overdue ? 650 : 400, marginTop: 3 }}>
+                    {new Date(td.due_at).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+                    {td.overdue ? ' · overdue' : ''}
+                  </div>
+                  {td.notes && <div className="t2" style={{ marginTop: 4 }}>{td.notes}</div>}
+                  <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 13.5, fontWeight: 650 }}>
+                    <button onClick={() => closeTodo(td.id)}>Done</button>
+                    <button onClick={() => snooze(td.id, 24)}>Tomorrow</button>
+                    <button onClick={() => downloadReminder({
+                      title: td.title, when: new Date(td.due_at),
+                      notes: td.notes || '', phone: td.phone })}>Add to calendar</button>
+                    {td.prospect_id && <button onClick={() => router.push(`/prospects/${td.prospect_id}`)}>Open</button>}
+                    {td.lead_id && <button onClick={() => router.push(`/leads/${td.lead_id}`)}>Open</button>}
+                  </div>
+                </div>
+                {td.phone && <a className="callbtn" href={`tel:${td.phone}`}>Call</a>}
+              </div>
+            ))}
+            <div className="section-label">Jobs</div>
+          </>
+        )}
         {loading ? null : jobs.length === 0 ? (
           <div className="empty">
             <strong>{t('noJobs', lang)}</strong>

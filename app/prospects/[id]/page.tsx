@@ -4,6 +4,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
 import PeoplePanel from '@/components/PeoplePanel';
+import FollowUpForm from '@/components/FollowUpForm';
 
 const STATUSES = ['new','researching','contacted','responded','meeting_set','quoting',
                   'won','not_interested','bad_fit','do_not_contact'];
@@ -181,6 +182,10 @@ export default function ProspectDetail() {
             <a href={p.website.startsWith('http') ? p.website : `https://${p.website}`}
                target="_blank" style={{ fontWeight: 640 }}>{p.website}</a></div>}
         </div>
+
+        <div className="section-label">Next step</div>
+        <FollowUpForm prospectId={id} phone={p.phone}
+          defaultTitle={`Call ${p.company}`} onSaved={() => flash('Follow-up set')} />
 
         <div className="section-label">Add a note</div>
         <div className="field">
