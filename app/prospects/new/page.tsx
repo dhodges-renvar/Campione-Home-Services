@@ -63,7 +63,7 @@ export default function NewProspect() {
     });
     setBusy(false);
     const row = Array.isArray(data) ? data[0] : data;
-    router.push(row?.id ? `/prospects/${row.id}` : '/leads?tab=builders');
+    router.push(row?.id ? `/prospects/${row.id}` : '/prospects');
   }
 
   const exact = dupes.find((d) => d.exact);
@@ -71,7 +71,7 @@ export default function NewProspect() {
   return (
     <Chrome>
       <div className="bar">
-        <button className="back" onClick={() => router.push('/leads?tab=builders')}>{'\u2190'} Builders</button>
+        <button className="back" onClick={() => router.push('/prospects')}>{'\u2190'} Builders</button>
         <div><h1>Add a builder</h1><div className="sub">Company name is enough to start</div></div>
       </div>
 
