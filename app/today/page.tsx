@@ -17,7 +17,7 @@ type Job = {
 
 export default function Today() {
   const router = useRouter();
-  const [lang, setLang] = useLang();
+  const [lang] = useLang();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [queued, setQueued] = useState(0);
@@ -54,9 +54,8 @@ export default function Today() {
           <div className="sub">{new Date().toLocaleDateString(lang === 'es' ? 'es-US' : 'en-US',
             { weekday: 'long', month: 'short', day: 'numeric' })}</div>
         </div>
-        <button className="lang" onClick={() => setLang(lang === 'en' ? 'es' : 'en')}>
-          {lang === 'en' ? 'Espanol' : 'English'}
-        </button>
+        <button className="barbtn" onClick={() => router.push('/account')}
+          aria-label="Account">Account</button>
       </div>
       <OfflineBar />
       {queued > 0 && <div className="offline">{queued} photo{queued > 1 ? 's' : ''} waiting to send</div>}
