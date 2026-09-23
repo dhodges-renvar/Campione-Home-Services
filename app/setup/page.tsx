@@ -5,12 +5,13 @@ import Chrome from '@/components/Chrome';
 import { useRouter } from 'next/navigation';
 import { divisionColor, DIVISION_LABEL } from '@/lib/theme';
 
-type Panel = 'margins' | 'paint' | 'rates' | 'modifiers' | 'business' | 'checklists' | 'people';
+type Panel = 'margins' | 'paint' | 'rates' | 'drywall' | 'modifiers' | 'business' | 'checklists' | 'people';
 
 const PANELS: [Panel, string, string][] = [
   ['margins',    'Margins & minimums', 'What you charge by customer type'],
   ['paint',      'Paint prices',       'Cost per gallon by product'],
   ['rates',      'Production rates',   'How fast the crews cover ground'],
+  ['drywall',    'Drywall prices',     'Board prices, labor per board, materials'],
   ['modifiers',  'Job conditions',     'Prep, coats, access, sheen multipliers'],
   ['business',   'Labor & overhead',   'Hourly cost, mileage, sundries'],
   ['checklists', 'QC checklists',      'What crews check before closing a job'],
@@ -51,6 +52,7 @@ export default function Setup() {
         {panel === 'margins'    && <Margins flash={flash} />}
         {panel === 'paint'      && <Paint flash={flash} />}
         {panel === 'rates'      && <Rates flash={flash} />}
+        {panel === 'drywall'    && <Drywall flash={flash} />}
         {panel === 'modifiers'  && <Mods flash={flash} />}
         {panel === 'business'   && <Business flash={flash} />}
         {panel === 'checklists' && <Checklists flash={flash} />}
@@ -163,6 +165,65 @@ function Rates({ flash }: any) {
             <div className="setting" style={{ paddingLeft: 34 }}>
               <label style={{ fontSize: 14, color: 'var(--grey)' }}>{r.unit} per gallon</label>
               <Num value={r.coverage} onSave={(v: number) => save(r.id, { coverage: v })} />
+            </div>
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
+function Drywall({ flash }: any) {
+  const [boards, setBoards] = useState<any[]>([]);
+  const [mats, setMats] = useState<any[]>([]);
+  const [tab, setTab] = useState<'boards' | 'materials'>('boards');
+  useEffect(() => {
+    supabase.from('drywall_boards').select('*').order('sort_order').then(({ data }) => setBoards(data || []));
+    supabase.from('drywall_materials').select('*').order('sort_order').then(({ data }) => setMats(data || []));
+  }, []);
+  async function saveB(id: string, patch: any) {
+    await supabase.from('drywall_boards').update(patch).eq('id', id);
+    setBoards((r) => r.map((x) => (x.id === id ? { ...x, ...patch } : x))); flash('Saved');
+  }
+  async function saveM(id: string, patch: any) {
+    await supabase.from('drywall_materials').update(patch).eq('id', id);
+    setMats((r) => r.map((x) => (x.id === id ? { ...x, ...patch } : x))); flash('Saved');
+  }
+  return (
+    <>
+      <div className="chips" style={{ padding: '14px 20px' }}>
+        <button className="chip" data-on={tab === 'boards' ? '1' : '0'} onClick={() => setTab('boards')}>Board</button>
+        <button className="chip" data-on={tab === 'materials' ? '1' : '0'} onClick={() => setTab('materials')}>Materials</button>
+      </div>
+      {tab === 'boards' ? boards.map((b) => (
+        <div key={b.id}>
+          <div className="setting">
+            <div><label>{b.label}</label><div className="hintl">{b.sf_per_board} sf per board</div></div>
+            <Num value={b.price_each} prefix="$" onSave={(v: number) => saveB(b.id, { price_each: v })} />
+          </div>
+          <div className="setting" style={{ paddingLeft: 34 }}>
+            <label style={{ fontSize: 14, color: 'var(--ink-3)' }}>Hang, per board</label>
+            <Num value={b.hang_each} prefix="$" onSave={(v: number) => saveB(b.id, { hang_each: v })} />
+          </div>
+          <div className="setting" style={{ paddingLeft: 34 }}>
+            <label style={{ fontSize: 14, color: 'var(--ink-3)' }}>Tape and finish, per board</label>
+            <Num value={b.finish_each} prefix="$" onSave={(v: number) => saveB(b.id, { finish_each: v })} />
+          </div>
+        </div>
+      )) : mats.map((m) => (
+        <div key={m.id}>
+          <div className="setting">
+            <div><label>{m.label}</label>
+              <div className="hintl">
+                per {m.unit}{m.basis === 'per_board' && m.coverage ? ` · covers ${m.coverage} boards` : ''}
+                {m.basis === 'per_100sf' && m.coverage ? ` · covers ${m.coverage * 100} sf` : ''}
+              </div></div>
+            <Num value={m.price_each} prefix="$" onSave={(v: number) => saveM(m.id, { price_each: v })} />
+          </div>
+          {m.coverage != null && m.basis !== 'per_piece' && (
+            <div className="setting" style={{ paddingLeft: 34 }}>
+              <label style={{ fontSize: 14, color: 'var(--ink-3)' }}>Coverage</label>
+              <Num value={m.coverage} onSave={(v: number) => saveM(m.id, { coverage: v })} />
             </div>
           )}
         </div>
