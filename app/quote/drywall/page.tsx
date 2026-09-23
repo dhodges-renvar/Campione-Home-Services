@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
 import { accentStyle } from '@/lib/theme';
-import { priceDrywall, DrywallJob, Board, Material, Mod } from '@/lib/drywall';
+import { priceDrywall, newLine, DrywallJob, BoardLine, Board, Material, Mod } from '@/lib/drywall';
 
 const money = (n: any) => '$' + Math.round(Number(n) || 0).toLocaleString();
 const BEADS = ['bead_metal', 'bead_paper', 'bead_bull', 'bead_l', 'bead_j', 'bead_arch'];
@@ -21,14 +21,17 @@ export default function DrywallQuote() {
   const [showDetail, setShowDetail] = useState(false);
 
   const [job, setJob] = useState<DrywallJob>({
-    turnkey: true, wallSf: 0, ceilingSf: 0,
-    wallBoardCode: 'std_12_4x12', ceilingBoardCode: 'std_12_4x12',
+    turnkey: true,
+    wallLines: [newLine('std_12_4x12')],
+    ceilingLines: [newLine('std_12_4x12')],
     level: '4', access: 'standard', openings: 0,
     beads: BEADS.map((code) => ({ code, pieces: 0 })),
     dumpster: 0, touchPrime: 4, touchFinal: 4, touchQc: 3, touchHome: 3,
     wastePct: 0.12, businessType: 'consumer',
   });
   const set = (k: keyof DrywallJob, v: any) => setJob((j) => ({ ...j, [k]: v }));
+  const setLine = (which: 'wallLines' | 'ceilingLines', key: string, patch: Partial<BoardLine>) =>
+    setJob((j) => ({ ...j, [which]: j[which].map((l) => (l.key === key ? { ...l, ...patch } : l)) }));
 
   useEffect(() => {
     (async () => {
@@ -125,30 +128,74 @@ export default function DrywallQuote() {
             </div>
           </div>
 
-          <div className="section-label">Square footage</div>
-          <div className="field">
-            <div className="grid3" style={{ gridTemplateColumns: '1fr 1fr' }}>
-              <div><label>Wall SF</label>
-                <input type="number" inputMode="decimal" value={job.wallSf || ''}
-                  onChange={(e) => set('wallSf', +e.target.value)} /></div>
-              <div><label>Ceiling SF</label>
-                <input type="number" inputMode="decimal" value={job.ceilingSf || ''}
-                  onChange={(e) => set('ceilingSf', +e.target.value)} /></div>
+          <div className="section-label">Walls — board type and square footage</div>
+          {job.wallLines.map((l, i) => (
+            <div className="field" key={l.key}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+                <div style={{ flex: 2 }}>
+                  <label>Board</label>
+                  <select value={l.code} onChange={(e) => setLine('wallLines', l.key, { code: e.target.value })}>
+                    {boards.map((b) => <option key={b.code} value={b.code}>{b.label}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label>SF</label>
+                  <input type="number" inputMode="decimal" style={{ textAlign: 'center' }}
+                    value={l.sf || ''} onChange={(e) => setLine('wallLines', l.key, { sf: +e.target.value })} />
+                </div>
+                {job.wallLines.length > 1 && (
+                  <button className="rmdel" style={{ paddingBottom: 14 }}
+                    onClick={() => setJob((j) => ({ ...j, wallLines: j.wallLines.filter((x) => x.key !== l.key) }))}>
+                    &times;
+                  </button>
+                )}
+              </div>
+              {i === 0 && (
+                <div className="t2" style={{ marginTop: 8 }}>
+                  Add a line for wet walls. Baths, laundry and garage usually need moisture resistant.
+                </div>
+              )}
             </div>
-          </div>
+          ))}
+          <button className="addroom"
+            onClick={() => setJob((j) => ({ ...j, wallLines: [...j.wallLines, newLine('mr_12_4x8')] }))}>
+            Add a wall board type
+          </button>
 
-          <div className="setting">
-            <label>Wall board</label>
-            <select value={job.wallBoardCode} onChange={(e) => set('wallBoardCode', e.target.value)}>
-              {boards.map((b) => <option key={b.code} value={b.code}>{b.label}</option>)}
-            </select>
-          </div>
-          <div className="setting">
-            <label>Ceiling board</label>
-            <select value={job.ceilingBoardCode} onChange={(e) => set('ceilingBoardCode', e.target.value)}>
-              {boards.filter((b) => b.ceiling_ok).map((b) => <option key={b.code} value={b.code}>{b.label}</option>)}
-            </select>
-          </div>
+          <div className="section-label">Ceilings — board type and square footage</div>
+          {job.ceilingLines.map((l, i) => (
+            <div className="field" key={l.key}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+                <div style={{ flex: 2 }}>
+                  <label>Board</label>
+                  <select value={l.code} onChange={(e) => setLine('ceilingLines', l.key, { code: e.target.value })}>
+                    {boards.filter((b) => b.ceiling_ok).map((b) => <option key={b.code} value={b.code}>{b.label}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label>SF</label>
+                  <input type="number" inputMode="decimal" style={{ textAlign: 'center' }}
+                    value={l.sf || ''} onChange={(e) => setLine('ceilingLines', l.key, { sf: +e.target.value })} />
+                </div>
+                {job.ceilingLines.length > 1 && (
+                  <button className="rmdel" style={{ paddingBottom: 14 }}
+                    onClick={() => setJob((j) => ({ ...j, ceilingLines: j.ceilingLines.filter((x) => x.key !== l.key) }))}>
+                    &times;
+                  </button>
+                )}
+              </div>
+              {i === 0 && (
+                <div className="t2" style={{ marginTop: 8 }}>
+                  Garage ceilings are 5/8 Type X by code. Bath ceilings usually moisture resistant.
+                </div>
+              )}
+            </div>
+          ))}
+          <button className="addroom"
+            onClick={() => setJob((j) => ({ ...j, ceilingLines: [...j.ceilingLines, newLine('x_58_4x8')] }))}>
+            Add a ceiling board type
+          </button>
+
           <div className="setting">
             <label>Waste factor</label>
             <input type="number" step="1" value={Math.round(job.wastePct * 100)}

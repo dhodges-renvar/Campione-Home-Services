@@ -19,12 +19,18 @@ export type Mod = { group_code: string; option_code: string; label: string; mult
 
 export type BeadLine = { code: string; pieces: number };
 
+/* A house is never one board type. Wet walls get moisture resistant, garage
+   ceilings get Type X, the rest gets standard. Each surface is its own line
+   with its own square footage. */
+export type BoardLine = { key: string; code: string; sf: number };
+
+export const newLine = (code: string): BoardLine =>
+  ({ key: Math.random().toString(36).slice(2), code, sf: 0 });
+
 export type DrywallJob = {
   turnkey: boolean;
-  wallSf: number;
-  ceilingSf: number;
-  wallBoardCode: string;
-  ceilingBoardCode: string;
+  wallLines: BoardLine[];
+  ceilingLines: BoardLine[];
   level: string;          // dw_level option
   access: string;         // dw_access option
   openings: number;
@@ -43,26 +49,48 @@ export function priceDrywall(o: {
   laborRate: number; margin: number; minimum: number; sundriesPerHour: number;
 }) {
   const { job, boards, materials, mods, laborRate, margin, minimum } = o;
-  const wall = boards.find((b) => b.code === job.wallBoardCode);
-  const ceil = boards.find((b) => b.code === job.ceilingBoardCode);
   const waste = 1 + (job.wastePct || 0);
+  const byCode = new Map(boards.map((b) => [b.code, b]));
 
   const levelMult   = mod(mods, 'dw_level', job.level);
   const accessMult  = mod(mods, 'dw_access', job.access);
   const ceilingMult = mod(mods, 'dw_ceiling', 'ceiling');
 
-  const wallBoards = wall ? Math.ceil((job.wallSf / wall.sf_per_board) * waste) : 0;
-  const ceilBoards = ceil ? Math.ceil((job.ceilingSf / ceil.sf_per_board) * waste) : 0;
+  type Take = { board: Board; qty: number; sf: number; ceiling: boolean };
+  const takeoff: Take[] = [];
+
+  for (const l of job.wallLines) {
+    const b = byCode.get(l.code);
+    if (!b || !l.sf) continue;
+    takeoff.push({ board: b, qty: Math.ceil((l.sf / b.sf_per_board) * waste), sf: l.sf, ceiling: false });
+  }
+  for (const l of job.ceilingLines) {
+    const b = byCode.get(l.code);
+    if (!b || !l.sf) continue;
+    takeoff.push({ board: b, qty: Math.ceil((l.sf / b.sf_per_board) * waste), sf: l.sf, ceiling: true });
+  }
+
+  // merge lines that landed on the same board so the take-off reads cleanly
+  const merged = new Map<string, Take>();
+  for (const t of takeoff) {
+    const k = `${t.board.code}|${t.ceiling}`;
+    const e = merged.get(k);
+    if (e) { e.qty += t.qty; e.sf += t.sf; } else merged.set(k, { ...t });
+  }
+  const rows = Array.from(merged.values());
+
+  const wallBoards = rows.filter((r) => !r.ceiling).reduce((a, r) => a + r.qty, 0);
+  const ceilBoards = rows.filter((r) => r.ceiling).reduce((a, r) => a + r.qty, 0);
   const totalBoards = wallBoards + ceilBoards;
-  const totalSf = (job.wallSf || 0) + (job.ceilingSf || 0);
+  const totalSf = rows.reduce((a, r) => a + r.sf, 0);
 
   // ---- labor ----
-  const hang =
-    (wall ? wallBoards * wall.hang_each : 0) +
-    (ceil ? ceilBoards * ceil.hang_each * ceilingMult : 0);
-  const finish =
-    ((wall ? wallBoards * wall.finish_each : 0) +
-     (ceil ? ceilBoards * ceil.finish_each * ceilingMult : 0)) * levelMult;
+  let hang = 0, finish = 0;
+  for (const r of rows) {
+    const m = r.ceiling ? ceilingMult : 1;
+    hang   += r.qty * r.board.hang_each * m;
+    finish += r.qty * r.board.finish_each * m * levelMult;
+  }
   const boardLabor = (hang + finish) * accessMult;
 
   const touchHours = (job.touchPrime || 0) + (job.touchFinal || 0) +
@@ -75,17 +103,13 @@ export function priceDrywall(o: {
   const lines: { label: string; qty: number; unit: string; cost: number }[] = [];
   let materialCost = 0;
 
-  if (job.turnkey) {
-    if (wall && wallBoards) {
-      const c = wallBoards * wall.price_each;
-      lines.push({ label: wall.label, qty: wallBoards, unit: 'boards', cost: c });
-      materialCost += c;
-    }
-    if (ceil && ceilBoards) {
-      const c = ceilBoards * ceil.price_each;
-      lines.push({ label: `${ceil.label} (ceiling)`, qty: ceilBoards, unit: 'boards', cost: c });
-      materialCost += c;
-    }
+  for (const r of rows) {
+    const cost = job.turnkey ? r.qty * r.board.price_each : 0;
+    lines.push({
+      label: r.ceiling ? `${r.board.label} (ceiling)` : r.board.label,
+      qty: r.qty, unit: 'boards', cost,
+    });
+    materialCost += cost;
   }
 
   const beadByCode = new Map(job.beads.filter((b) => b.pieces > 0).map((b) => [b.code, b.pieces]));
@@ -106,12 +130,10 @@ export function priceDrywall(o: {
         qty = beadByCode.get(m.code) ?? 0;
       }
     }
-    if (qty > 0 && job.turnkey) {
-      const c = qty * m.price_each;
-      lines.push({ label: m.label, qty, unit: m.unit, cost: c });
-      materialCost += c;
-    } else if (qty > 0) {
-      lines.push({ label: m.label, qty, unit: m.unit, cost: 0 });
+    if (qty > 0) {
+      const cost = job.turnkey ? qty * m.price_each : 0;
+      lines.push({ label: m.label, qty, unit: m.unit, cost });
+      materialCost += cost;
     }
   }
 
