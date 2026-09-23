@@ -4,10 +4,16 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
 import { accentStyle } from '@/lib/theme';
-import { priceDrywall, newLine, DrywallJob, BoardLine, Board, Material, Mod } from '@/lib/drywall';
+import { priceDrywall, defaultPicks, newLine, DrywallJob, BoardLine, Board, Material, Mod } from '@/lib/drywall';
 
 const money = (n: any) => '$' + Math.round(Number(n) || 0).toLocaleString();
 const BEADS = ['bead_metal', 'bead_paper', 'bead_bull', 'bead_l', 'bead_j', 'bead_arch'];
+const GROUP_LABEL: Record<string, string> = {
+  tape: 'Joint tape',
+  bed_coat: 'Bedding coat',
+  finish_coat: 'Finish coats',
+};
+
 
 export default function DrywallQuote() {
   const router = useRouter();
@@ -27,7 +33,7 @@ export default function DrywallQuote() {
     level: '4', access: 'standard', openings: 0,
     beads: BEADS.map((code) => ({ code, pieces: 0 })),
     dumpster: 0, touchPrime: 4, touchFinal: 4, touchQc: 3, touchHome: 3,
-    wastePct: 0.12, businessType: 'consumer',
+    wastePct: 0.12, businessType: 'consumer', picks: {},
   });
   const set = (k: keyof DrywallJob, v: any) => setJob((j) => ({ ...j, [k]: v }));
   const setLine = (which: 'wallLines' | 'ceilingLines', key: string, patch: Partial<BoardLine>) =>
@@ -42,12 +48,14 @@ export default function DrywallQuote() {
         supabase.from('business_settings').select('key,value'),
         supabase.from('business_types').select('*').order('sort_order'),
       ]);
-      setBoards((b.data as any) || []); setMaterials((m.data as any) || []);
+      const mats = ((m.data as any) || []) as Material[];
+      setBoards((b.data as any) || []); setMaterials(mats);
       setMods((md.data as any) || []); setBtypes(bt.data || []);
       const sx = Object.fromEntries((s.data || []).map((x: any) => [x.key, Number(x.value)]));
       setSettings(sx);
       setJob((j) => ({
         ...j,
+        picks: defaultPicks(mats),
         wastePct: sx['dw_waste_pct'] ?? 0.12,
         touchPrime: sx['dw_touchup_prime'] ?? 4,
         touchFinal: sx['dw_touchup_final'] ?? 4,
@@ -227,6 +235,27 @@ export default function DrywallQuote() {
               onChange={(e) => set('openings', +e.target.value)} />
           </div>
 
+          <div className="section-label">Materials</div>
+          {Array.from(new Set(materials.filter((m) => m.option_group).map((m) => m.option_group!)))
+            .map((g) => (
+            <div className="setting" key={g}>
+              <label>{GROUP_LABEL[g] || g}</label>
+              <select value={job.picks[g] ?? ''}
+                onChange={(e) => set('picks', { ...job.picks, [g]: e.target.value })}>
+                {materials.filter((m) => m.option_group === g).map((m) => (
+                  <option key={m.code} value={m.code}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+          <div className="field">
+            <div className="t2">
+              Always included and worked out from the board count:{' '}
+              {materials.filter((m) => !m.option_group && m.basis !== 'per_job' && m.basis !== 'per_piece')
+                .map((m) => m.label.replace(/\s+\d.*$/, '')).join(', ')}.
+            </div>
+          </div>
+
           <div className="section-label">Corner bead — pieces</div>
           {beadRows.map((m) => (
             <div className="setting" key={m.code}>
@@ -261,9 +290,12 @@ export default function DrywallQuote() {
               {showDetail && (
                 <div className="field">
                   {out.lines.map((l, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 15.5 }}>
-                      <span style={{ color: 'var(--ink-3)' }}>{l.qty} {l.unit} · {l.label}</span>
-                      <b>{l.cost ? money(l.cost) : 'by others'}</b>
+                    <div key={i} style={{ padding: '6px 0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15.5 }}>
+                        <span style={{ color: 'var(--ink-3)' }}>{l.qty} {l.unit} · {l.label}</span>
+                        <b>{l.cost ? money(l.cost) : 'by others'}</b>
+                      </div>
+                      {l.why && <div className="t2" style={{ fontSize: 12.5 }}>{l.why}</div>}
                     </div>
                   ))}
                   <div style={{ borderTop: '1px solid var(--line)', marginTop: 10, paddingTop: 10 }}>

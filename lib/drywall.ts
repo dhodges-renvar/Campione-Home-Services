@@ -14,6 +14,10 @@ export type Material = {
   basis: 'per_board' | 'per_100sf' | 'per_piece' | 'per_job';
   coverage: number | null; price_each: number;
   scales_with_level: boolean; ceiling_only: boolean;
+  /* Materials sharing an option_group are alternatives — paper tape or mesh,
+     setting compound or all-purpose. Exactly one is used per job. A material
+     with no group is always included. */
+  option_group: string | null; is_default: boolean;
 };
 export type Mod = { group_code: string; option_code: string; label: string; multiplier: number };
 
@@ -39,10 +43,22 @@ export type DrywallJob = {
   touchPrime: number; touchFinal: number; touchQc: number; touchHome: number;
   wastePct: number;
   businessType: string;
+  /* which material was picked in each option group: { tape: 'tape_paper', ... } */
+  picks: Record<string, string>;
 };
 
 const mod = (mods: Mod[], g: string, o: string) =>
   mods.find((m) => m.group_code === g && m.option_code === o)?.multiplier ?? 1;
+
+/** Defaults for the option groups, straight from the price book. */
+export function defaultPicks(materials: Material[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const m of materials) {
+    if (!m.option_group) continue;
+    if (m.is_default || !out[m.option_group]) out[m.option_group] = m.code;
+  }
+  return out;
+}
 
 export function priceDrywall(o: {
   job: DrywallJob; boards: Board[]; materials: Material[]; mods: Mod[];
@@ -100,7 +116,7 @@ export function priceDrywall(o: {
   const laborCost = boardLabor + hourlyLabor;
 
   // ---- materials ----
-  const lines: { label: string; qty: number; unit: string; cost: number }[] = [];
+  const lines: { label: string; qty: number; unit: string; cost: number; why?: string }[] = [];
   let materialCost = 0;
 
   for (const r of rows) {
@@ -108,6 +124,7 @@ export function priceDrywall(o: {
     lines.push({
       label: r.ceiling ? `${r.board.label} (ceiling)` : r.board.label,
       qty: r.qty, unit: 'boards', cost,
+      why: `${r.sf} sf / ${r.board.sf_per_board} sf per board, +${Math.round((waste - 1) * 100)}% waste`,
     });
     materialCost += cost;
   }
@@ -115,6 +132,8 @@ export function priceDrywall(o: {
   const beadByCode = new Map(job.beads.filter((b) => b.pieces > 0).map((b) => [b.code, b.pieces]));
 
   for (const m of materials) {
+    // in an option group, skip anything that was not picked
+    if (m.option_group && job.picks[m.option_group] !== m.code) continue;
     let qty = 0;
     if (m.basis === 'per_board' && m.coverage) {
       const base = m.ceiling_only ? ceilBoards : totalBoards;
@@ -132,7 +151,17 @@ export function priceDrywall(o: {
     }
     if (qty > 0) {
       const cost = job.turnkey ? qty * m.price_each : 0;
-      lines.push({ label: m.label, qty, unit: m.unit, cost });
+      let why = '';
+      if (m.basis === 'per_board' && m.coverage) {
+        const base = m.ceiling_only ? ceilBoards : totalBoards;
+        why = `${base} ${m.ceiling_only ? 'ceiling ' : ''}boards / ${m.coverage} per ${m.unit}` +
+              (m.scales_with_level ? ` × ${levelMult.toFixed(2)} finish level` : '');
+      } else if (m.basis === 'per_100sf' && m.coverage) {
+        why = `${Math.round(totalSf)} sf, one ${m.unit} per ${m.coverage * 100} sf`;
+      } else if (m.code === 'bead_fast' && m.coverage) {
+        why = `one per ${m.coverage} pieces of bead`;
+      }
+      lines.push({ label: m.label, qty, unit: m.unit, cost, why: why || undefined });
       materialCost += cost;
     }
   }

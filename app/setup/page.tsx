@@ -217,9 +217,26 @@ function Drywall({ flash }: any) {
               <div className="hintl">
                 per {m.unit}{m.basis === 'per_board' && m.coverage ? ` · covers ${m.coverage} boards` : ''}
                 {m.basis === 'per_100sf' && m.coverage ? ` · covers ${m.coverage * 100} sf` : ''}
+                {m.option_group
+                  ? ` · pick one: ${m.option_group.replace('_', ' ')}${m.is_default ? ' (default)' : ''}`
+                  : m.basis === 'per_piece' || m.basis === 'per_job' ? ' · entered on the quote'
+                  : ' · always included'}
               </div></div>
             <Num value={m.price_each} prefix="$" onSave={(v: number) => saveM(m.id, { price_each: v })} />
           </div>
+          {m.option_group && !m.is_default && (
+            <div className="setting" style={{ paddingLeft: 34 }}>
+              <label style={{ fontSize: 14, color: 'var(--ink-3)' }}>Make this the default</label>
+              <button className="chip" onClick={async () => {
+                await supabase.from('drywall_materials').update({ is_default: false })
+                  .eq('option_group', m.option_group);
+                await supabase.from('drywall_materials').update({ is_default: true }).eq('id', m.id);
+                setMats((r) => r.map((x) => x.option_group === m.option_group
+                  ? { ...x, is_default: x.id === m.id } : x));
+                flash('Default changed');
+              }}>Set</button>
+            </div>
+          )}
           {m.coverage != null && m.basis !== 'per_piece' && (
             <div className="setting" style={{ paddingLeft: 34 }}>
               <label style={{ fontSize: 14, color: 'var(--ink-3)' }}>Coverage</label>
