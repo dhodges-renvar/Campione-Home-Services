@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
 import { accentStyle } from '@/lib/theme';
+import { useTradeMargins } from '@/lib/margin';
 import {
   Room, emptyRoom, roomQuantities, roomWarnings, priceEstimate,
   JobSettings, Rate, Modifier, Settings, MeasureMode,
@@ -19,7 +20,7 @@ function NewQuoteInner() {
   const [mods, setMods] = useState<Modifier[]>([]);
   const [settings, setSettings] = useState<Settings>({});
   const [paints, setPaints] = useState<any[]>([]);
-  const [btypes, setBtypes] = useState<any[]>([]);
+  const { rows: btypes, find: findMargin } = useTradeMargins('painting');
   const [rooms, setRooms] = useState<Room[]>([emptyRoom(1)]);
   const [saving, setSaving] = useState(false);
   const [who, setWho] = useState({ name: '', phone: '', address: '', city: '' });
@@ -50,18 +51,16 @@ function NewQuoteInner() {
 
   useEffect(() => {
     (async () => {
-      const [r, m, s, p, b] = await Promise.all([
+      const [r, m, s, p] = await Promise.all([
         supabase.from('rate_items').select('*').eq('active', true),
         supabase.from('modifiers').select('*'),
         supabase.from('business_settings').select('key,value'),
         supabase.from('paint_products').select('*').order('sort_order'),
-        supabase.from('business_types').select('*').order('sort_order'),
       ]);
       setRates((r.data as any) || []);
       setMods((m.data as any) || []);
       setSettings(Object.fromEntries((s.data || []).map((x: any) => [x.key, Number(x.value)])));
       setPaints(p.data || []);
-      setBtypes(b.data || []);
       if (s.data) setJob((j) => ({
         ...j,
         miles: Number((s.data as any).find((x: any) => x.key === 'default_round_trip_miles')?.value ?? 40),
@@ -70,7 +69,7 @@ function NewQuoteInner() {
     })();
   }, []);
 
-  const bt = btypes.find((x) => x.code === job.business_type);
+  const bt = findMargin(job.business_type);
   const paintCost = Number(paints.find((p) => p.tier === job.paint_tier)?.cost_per_gallon ?? 52);
 
   const out = useMemo(() => {
@@ -267,7 +266,7 @@ function NewQuoteInner() {
 
           <div className="section-label">Job settings</div>
           {([
-            ['Customer type', 'business_type', btypes.map((b) => [b.code, b.label])],
+            ['Customer type', 'business_type', btypes.map((b) => [b.business_type, b.label])],
             ['Condition', 'condition', opts('condition').map((o) => [o.option_code, o.label])],
             ['Coats', 'coats', opts('coats').map((o) => [o.option_code, o.label])],
             ['Color change', 'color', opts('color').map((o) => [o.option_code, o.label])],

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
 import { accentStyle } from '@/lib/theme';
+import { useTradeMargins } from '@/lib/margin';
 import { priceDrywall, defaultPicks, newLine, DrywallJob, BoardLine, Board, Material, Mod } from '@/lib/drywall';
 
 const money = (n: any) => '$' + Math.round(Number(n) || 0).toLocaleString();
@@ -21,7 +22,7 @@ export default function DrywallQuote() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [mods, setMods] = useState<Mod[]>([]);
   const [settings, setSettings] = useState<Record<string, number>>({});
-  const [btypes, setBtypes] = useState<any[]>([]);
+  const { rows: btypes, find: findMargin } = useTradeMargins('drywall');
   const [who, setWho] = useState({ name: '', phone: '', address: '', city: '' });
   const [saving, setSaving] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
@@ -41,16 +42,15 @@ export default function DrywallQuote() {
 
   useEffect(() => {
     (async () => {
-      const [b, m, md, s, bt] = await Promise.all([
+      const [b, m, md, s] = await Promise.all([
         supabase.from('drywall_boards').select('*').eq('active', true).order('sort_order'),
         supabase.from('drywall_materials').select('*').eq('active', true).order('sort_order'),
         supabase.from('modifiers').select('*').like('group_code', 'dw_%'),
         supabase.from('business_settings').select('key,value'),
-        supabase.from('business_types').select('*').order('sort_order'),
       ]);
       const mats = ((m.data as any) || []) as Material[];
       setBoards((b.data as any) || []); setMaterials(mats);
-      setMods((md.data as any) || []); setBtypes(bt.data || []);
+      setMods((md.data as any) || []);
       const sx = Object.fromEntries((s.data || []).map((x: any) => [x.key, Number(x.value)]));
       setSettings(sx);
       setJob((j) => ({
@@ -65,7 +65,7 @@ export default function DrywallQuote() {
     })();
   }, []);
 
-  const bt = btypes.find((x) => x.code === job.businessType);
+  const bt = findMargin(job.businessType);
   const out = useMemo(() => {
     if (!boards.length) return null;
     return priceDrywall({
@@ -224,9 +224,15 @@ export default function DrywallQuote() {
             </select>
           </div>
           <div className="setting">
-            <label>Customer type</label>
+            <div>
+              <label>Customer type</label>
+              {bt && <div className="hintl">
+                drywall margin {Math.round(bt.target_margin * 100)}%
+                {bt.minimum_charge > 0 ? ` · min ${money(bt.minimum_charge)}` : ' · no minimum'}
+              </div>}
+            </div>
             <select value={job.businessType} onChange={(e) => set('businessType', e.target.value)}>
-              {btypes.map((b) => <option key={b.code} value={b.code}>{b.label}</option>)}
+              {btypes.map((b) => <option key={b.business_type} value={b.business_type}>{b.label}</option>)}
             </select>
           </div>
           <div className="setting">

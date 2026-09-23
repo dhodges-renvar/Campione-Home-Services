@@ -8,7 +8,7 @@ import { divisionColor, DIVISION_LABEL } from '@/lib/theme';
 type Panel = 'margins' | 'paint' | 'rates' | 'drywall' | 'modifiers' | 'business' | 'checklists' | 'people';
 
 const PANELS: [Panel, string, string][] = [
-  ['margins',    'Margins & minimums', 'What you charge by customer type'],
+  ['margins',    'Margins & minimums', 'By trade, then by customer type'],
   ['paint',      'Paint prices',       'Cost per gallon by product'],
   ['rates',      'Production rates',   'How fast the crews cover ground'],
   ['drywall',    'Drywall prices',     'Board prices, labor per board, materials'],
@@ -79,40 +79,75 @@ function Num({ value, onSave, step = 'any', prefix, suffix, pct }: any) {
   );
 }
 
+const TRADES: [string, string][] = [
+  ['painting', 'Painting'], ['drywall', 'Drywall'], ['pressure_washing', 'Pressure washing'],
+  ['cleaning', 'Cleaning'], ['exteriors', 'Exteriors'],
+];
+
 function Margins({ flash }: any) {
+  const [trade, setTrade] = useState('painting');
   const [rows, setRows] = useState<any[]>([]);
   const [labor, setLabor] = useState(35.75);
+
+  async function load() {
+    const { data } = await supabase.from('v_trade_margins').select('*')
+      .eq('trade', trade).order('sort_order');
+    setRows(data || []);
+  }
+  useEffect(() => { load(); }, [trade]);
   useEffect(() => {
-    supabase.from('business_types').select('*').order('sort_order').then(({ data }) => setRows(data || []));
     supabase.from('business_settings').select('value').eq('key', 'loaded_labor_rate').single()
       .then(({ data }) => data && setLabor(Number(data.value)));
   }, []);
-  async function save(code: string, patch: any) {
-    await supabase.from('business_types').update(patch).eq('code', code);
-    setRows((r) => r.map((x) => (x.code === code ? { ...x, ...patch } : x)));
+
+  async function save(businessType: string, patch: any) {
+    const row = rows.find((r) => r.business_type === businessType);
+    await supabase.from('trade_margins').upsert({
+      trade, business_type: businessType,
+      target_margin: patch.target_margin ?? row.target_margin,
+      minimum_charge: patch.minimum_charge ?? row.minimum_charge,
+    }, { onConflict: 'trade,business_type' });
+    setRows((r) => r.map((x) => (x.business_type === businessType
+      ? { ...x, ...patch, is_set: true } : x)));
     flash('Saved');
   }
+
   return (
     <>
+      <div className="chips" style={{ padding: '14px 20px 0' }}>
+        {TRADES.map(([v, l]) => (
+          <button key={v} className="chip" data-on={trade === v ? '1' : '0'}
+            onClick={() => setTrade(v)}>{l}</button>
+        ))}
+      </div>
       <div className="section-label">Target margin by customer type</div>
       {rows.map((b) => (
-        <div key={b.code}>
+        <div key={b.business_type}>
           <div className="setting">
             <div>
               <label>{b.label}</label>
-              <div className="hintl">bills at {money(labor / (1 - Number(b.target_margin)))}/hr</div>
+              <div className="hintl">
+                bills at {money(labor / (1 - Number(b.target_margin)))}/hr
+                {!b.is_set && ' · using the shared default'}
+              </div>
             </div>
-            <Num value={b.target_margin} pct suffix="%" onSave={(v: number) => save(b.code, { target_margin: v })} />
+            <Num value={b.target_margin} pct suffix="%"
+              onSave={(v: number) => save(b.business_type, { target_margin: v })} />
           </div>
           <div className="setting" style={{ paddingLeft: 34 }}>
-            <label style={{ fontSize: 14, color: 'var(--grey)' }}>Minimum charge</label>
-            <Num value={b.minimum_charge} prefix="$" onSave={(v: number) => save(b.code, { minimum_charge: v })} />
+            <label style={{ fontSize: 14, color: 'var(--ink-3)' }}>Minimum charge</label>
+            <Num value={b.minimum_charge} prefix="$"
+              onSave={(v: number) => save(b.business_type, { minimum_charge: v })} />
           </div>
         </div>
       ))}
       <div className="field" style={{ background: 'var(--paper)', borderBottom: 'none' }}>
         <div className="hintl">
-          Production builder work carries no minimum on purpose — phase tickets run $100–150.
+          Each trade carries its own margin. A trade that has not been set up yet falls
+          back to the shared default until you change a number here.
+        </div>
+        <div className="hintl" style={{ marginTop: 8 }}>
+          Production builder work carries no minimum on purpose — phase tickets run $100-150.
         </div>
       </div>
     </>
