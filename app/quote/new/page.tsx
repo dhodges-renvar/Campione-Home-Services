@@ -8,11 +8,21 @@ import { useAutosave, useRecovered, clearDraft } from '@/lib/draft';
 import { accentStyle } from '@/lib/theme';
 import { useTradeMargins } from '@/lib/margin';
 import {
-  Room, emptyRoom, roomQuantities, roomWarnings, priceEstimate,
-  JobSettings, Rate, Modifier, Settings, MeasureMode,
+  Room, emptyRoom, roomQuantities, roomWarnings, priceEstimate, newSpecialty,
+  JobSettings, Rate, Modifier, Settings, MeasureMode, SpecialtyLine,
 } from '@/lib/pricing';
+import CustomerLookup, { Who } from '@/components/CustomerLookup';
 
 const money = (n: number) => '$' + Math.round(n || 0).toLocaleString();
+const TAKEOFF_FIELDS: [string, string][] = [
+  ['walls_smooth', 'Wall SF'],
+  ['ceiling_smooth', 'Ceiling SF'],
+  ['baseboard', 'Baseboard LF'],
+  ['crown', 'Crown LF'],
+  ['shoe_mold', 'Shoe mold LF'],
+  ['closet', 'Closets'],
+];
+
 
 function NewQuoteInner() {
   const router = useRouter();
@@ -27,7 +37,9 @@ function NewQuoteInner() {
   const { rows: btypes, find: findMargin } = useTradeMargins('painting');
   const [rooms, setRooms] = useState<Room[]>([emptyRoom(1)]);
   const [saving, setSaving] = useState(false);
-  const [who, setWho] = useState({ name: '', phone: '', address: '', city: '' });
+  const [who, setWho] = useState<Who>({ name: '', phone: '', address: '', city: '' });
+  const [specOpen, setSpecOpen] = useState(false);
+  const [heatedSf, setHeatedSf] = useState(0);
 
   const [job, setJob] = useState<JobSettings>({
     condition: 'minor_patch', coats: '2', color: 'same', occupancy: 'occupied_light',
@@ -35,6 +47,7 @@ function NewQuoteInner() {
     paint_tier: 'standard', primer: false,
     door_scope: 'door_full', window_scope: 'window_casing_sill',
     business_type: 'consumer', miles: 40, days_on_site: 3,
+    mode: 'room', takeoff: {}, specialty: [], notes: '',
   });
 
   useEffect(() => {
@@ -71,7 +84,13 @@ function NewQuoteInner() {
           .eq('id', estimateId).single();
         const { data: rm } = await supabase.from('estimate_rooms')
           .select('*').eq('estimate_id', estimateId).order('sort_order');
-        if (est?.settings) setJob((j) => ({ ...j, ...(est.settings as any) }));
+        if (est?.settings) setJob((j) => ({
+          ...j, ...(est.settings as any),
+          mode: (est as any).takeoff_mode ?? (est.settings as any).mode ?? 'room',
+          takeoff: (est as any).takeoff?.takeoff ?? (est.settings as any).takeoff ?? {},
+          specialty: (est as any).takeoff?.specialty ?? (est.settings as any).specialty ?? [],
+          notes: (est as any).project_notes ?? (est.settings as any).notes ?? '',
+        }));
         if (est) setWho({
           name: `${(est as any).contacts?.first_name ?? ''} ${(est as any).contacts?.last_name ?? ''}`.trim(),
           phone: (est as any).contacts?.phone ?? '',
@@ -124,6 +143,9 @@ function NewQuoteInner() {
     setSaving(true);
     const priced = {
       settings: job as any,
+      takeoff_mode: job.mode,
+      takeoff: { takeoff: job.takeoff, specialty: job.specialty } as any,
+      project_notes: job.notes || null,
       labor_hours: out!.totalHours, labor_multiplier: out!.multiplier,
       finish_gallons: out!.finishGal, primer_gallons: out!.primerGal,
       labor_cost: out!.laborCost, material_cost: out!.paint + out!.sundries,
@@ -145,20 +167,20 @@ function NewQuoteInner() {
     if (estimateId) {
       await supabase.from('estimates').update(priced).eq('id', estimateId);
       await supabase.from('estimate_rooms').delete().eq('estimate_id', estimateId);
-      await supabase.from('estimate_rooms').insert(roomRows(estimateId));
+      if (job.mode === 'room') await supabase.from('estimate_rooms').insert(roomRows(estimateId));
       clearDraft('painting', estimateId);
       setSaving(false); router.push('/quote'); return;
     }
-    const contactId = who.phone || who.name
+    const contactId = who.contactId ?? (who.phone || who.name
       ? (await supabase.rpc('find_or_create_contact', {
           p_phone: who.phone || null, p_email: null,
           p_first: who.name.split(' ')[0] || null,
           p_last: who.name.split(' ').slice(1).join(' ') || null,
         })).data
-      : null;
+      : null);
 
-    let propertyId = null;
-    if (who.address) {
+    let propertyId = who.propertyId ?? null;
+    if (!propertyId && who.address) {
       const { data } = await supabase.from('properties')
         .insert({ address_line1: who.address, city: who.city || null }).select('id').single();
       propertyId = data?.id ?? null;
@@ -171,6 +193,8 @@ function NewQuoteInner() {
       contact_id: contactId, property_id: propertyId,
       division: 'painting', service_type: 'interior',
       business_type: job.business_type, status: 'draft',
+      takeoff_mode: job.mode, takeoff: { takeoff: job.takeoff, specialty: job.specialty } as any,
+      project_notes: job.notes || null,
       settings: job as any,
       labor_hours: out!.totalHours, labor_multiplier: out!.multiplier,
       finish_gallons: out!.finishGal, primer_gallons: out!.primerGal,
@@ -225,15 +249,51 @@ function NewQuoteInner() {
               onDiscard={dismiss} />
           )}
           <div className="section-label">Customer</div>
-          <div className="grid3" style={{ padding: 18, gridTemplateColumns: '1fr 1fr' }}>
-            <div><label>Name</label><input value={who.name} onChange={(e) => setWho({ ...who, name: e.target.value })} /></div>
-            <div><label>Phone</label><input inputMode="tel" value={who.phone} onChange={(e) => setWho({ ...who, phone: e.target.value })} /></div>
-            <div><label>Address</label><input value={who.address} onChange={(e) => setWho({ ...who, address: e.target.value })} /></div>
-            <div><label>City</label><input value={who.city} onChange={(e) => setWho({ ...who, city: e.target.value })} /></div>
+          <CustomerLookup who={who} setWho={setWho} />
+
+          <div className="setting">
+            <div>
+              <label>How are you measuring</label>
+              <div className="hintl">
+                {job.mode === 'room'
+                  ? 'Room by room. Best for a straightforward repaint.'
+                  : 'Actual surfaces. Best for open plans and big custom homes.'}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="chip" data-on={job.mode === 'room' ? '1' : '0'}
+                onClick={() => upd('mode', 'room')}>Rooms</button>
+              <button className="chip" data-on={job.mode === 'takeoff' ? '1' : '0'}
+                onClick={() => upd('mode', 'takeoff')}>Takeoff</button>
+            </div>
           </div>
 
-          <div className="section-label">Rooms — measure, do not do math</div>
-          {rooms.map((r) => {
+          {job.mode === 'takeoff' && (
+            <>
+              <div className="section-label">Measured quantities</div>
+              {TAKEOFF_FIELDS.map(([code, label]) => (
+                <div className="setting" key={code}>
+                  <label>{label}</label>
+                  <input type="number" inputMode="decimal"
+                    value={job.takeoff[code] || ''}
+                    onChange={(e) => upd('takeoff', { ...job.takeoff, [code]: +e.target.value })} />
+                </div>
+              ))}
+              <div className="section-label">Doors and windows</div>
+              {rates.filter((r) => r.scope_group === 'door' || r.scope_group === 'window')
+                .map((r) => (
+                <div className="setting" key={r.code}>
+                  <div><label>{r.label}</label>{r.notes && <div className="hintl">{r.notes}</div>}</div>
+                  <input type="number" inputMode="numeric"
+                    value={job.takeoff[r.code] || ''}
+                    onChange={(e) => upd('takeoff', { ...job.takeoff, [r.code]: +e.target.value })} />
+                </div>
+              ))}
+            </>
+          )}
+
+          {job.mode === 'room' && <div className="section-label">Rooms — measure, do not do math</div>}
+          {job.mode === 'room' && rooms.map((r) => {
             const q2 = roomQuantities(r);
             const warn = roomWarnings(r);
             return (
@@ -338,9 +398,46 @@ function NewQuoteInner() {
               </div>
             );
           })}
-          <button className="addroom" onClick={() => setRooms((rs) => [...rs, emptyRoom(rs.length + 1)])}>
-            Add a room
+          {job.mode === 'room' && (
+            <button className="addroom" onClick={() => setRooms((rs) => [...rs, emptyRoom(rs.length + 1)])}>
+              Add a room
+            </button>
+          )}
+
+          <button className="acc" onClick={() => setSpecOpen(!specOpen)}>
+            <span>Specialty items</span>
+            <span className="r">
+              {job.specialty.filter((x) => x.qty > 0).length || 'add'} {specOpen ? '\u2212' : '+'}
+            </span>
           </button>
+          {specOpen && (
+            <div className="chips" style={{ padding: '12px 20px' }}>
+              {rates.filter((r) => r.category === 'specialty').map((r) => (
+                <button key={r.code} className="chip"
+                  data-on={job.specialty.some((x) => x.code === r.code) ? '1' : '0'}
+                  onClick={() => upd('specialty', job.specialty.some((x) => x.code === r.code)
+                    ? job.specialty.filter((x) => x.code !== r.code)
+                    : [...job.specialty, newSpecialty(r.code)])}>{r.label}</button>
+              ))}
+            </div>
+          )}
+          {job.specialty.map((sp) => {
+            const r = rates.find((x) => x.code === sp.code);
+            if (!r) return null;
+            return (
+              <div className="setting" key={sp.key}>
+                <div><label>{r.label}</label>
+                  <div className="hintl">{r.unit}{r.notes ? ` · ${r.notes}` : ''}</div></div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input type="number" inputMode="decimal" value={sp.qty || ''}
+                    onChange={(e) => upd('specialty', job.specialty.map((x) =>
+                      x.key === sp.key ? { ...x, qty: +e.target.value } : x))} />
+                  <button className="rmdel"
+                    onClick={() => upd('specialty', job.specialty.filter((x) => x.key !== sp.key))}>&times;</button>
+                </div>
+              </div>
+            );
+          })}
 
           <div className="section-label">Job settings</div>
           {([
@@ -378,6 +475,41 @@ function NewQuoteInner() {
             <input type="number" value={job.days_on_site} onChange={(e) => upd('days_on_site', +e.target.value)} />
           </div>
 
+          <div className="setting">
+            <div>
+              <label>Heated square feet</label>
+              <div className="hintl">Optional. Used only as a sanity check on the price.</div>
+            </div>
+            <input type="number" inputMode="numeric" value={heatedSf || ''}
+              onChange={(e) => setHeatedSf(+e.target.value)} />
+          </div>
+          {heatedSf > 0 && out && (() => {
+            const psf = out.price / heatedSf;
+            const lo = settings['bench_interior_low'] ?? 2.4;
+            const hi = settings['bench_interior_high'] ?? 4.6;
+            const off = psf < lo || psf > hi;
+            return (
+              <div className="field" style={{ background: off ? 'var(--amber-bg)' : 'var(--paper)' }}>
+                <div style={{ fontSize: 14.5, fontWeight: 620, color: off ? 'var(--amber)' : 'var(--ink-3)' }}>
+                  {money(psf)}/sf against a {money(lo)}&ndash;{money(hi)} range
+                  {off ? psf < lo ? ' — low. Check for a surface you missed.'
+                                  : ' — high. Fine on a complex house, worth a second look.'
+                       : ' — in range.'}
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="section-label">Project notes</div>
+          <div className="field">
+            <textarea className="note" rows={4} value={job.notes}
+              onChange={(e) => upd('notes', e.target.value)}
+              placeholder="Specifications, exclusions, anything the proposal needs to say" />
+            <div className="t2" style={{ marginTop: 8 }}>
+              These carry onto the proposal. Be specific about what is not included.
+            </div>
+          </div>
+
           {out && (
             <div className="field">
               <div className="section-label" style={{ margin: '0 -18px 12px' }}>Cost breakdown</div>
@@ -404,6 +536,7 @@ function NewQuoteInner() {
                   <span><b>{out.manDays.toFixed(1)}</b> man days</span>
                   <span><b>{out.finishGal.toFixed(1)}</b> gal</span>
                   <span><b>{money(out.effectiveRate)}</b>/hr</span>
+                  {heatedSf > 0 && <span><b>{money(out.price / heatedSf)}</b>/sf</span>}
                 </div>
               </div>
               <button className="btn" onClick={save} disabled={saving || !rooms.some((r) => r.length && r.width)}>

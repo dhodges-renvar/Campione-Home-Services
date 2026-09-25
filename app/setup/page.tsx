@@ -184,7 +184,7 @@ function Rates({ flash }: any) {
     await supabase.from('rate_items').update(patch).eq('id', id);
     setRows((r) => r.map((x) => (x.id === id ? { ...x, ...patch } : x))); flash('Saved');
   }
-  const cats = ['interior', 'exterior', 'cabinets', 'repairs'];
+  const cats = ['interior', 'exterior', 'cabinets', 'specialty', 'repairs'];
   return (
     <>
       <div className="chips" style={{ padding: '14px 20px' }}>

@@ -10,6 +10,7 @@ export type Rate = {
   id: string; code: string; label: string; unit: string;
   production_rate: number; coverage: number | null;
   material_cost: number | null; scope_group: string | null; category: string;
+  notes?: string | null;
 };
 export type Modifier = {
   group_code: string; option_code: string; label: string;
@@ -54,6 +55,14 @@ export const emptyRoom = (n = 1): Room => ({
   paintDoors: true, paintWindows: true, paintClosets: false,
 });
 
+/* Both workflows end up here. Room-Based derives these from rooms; Detailed
+   Takeoff has the rep enter them directly. Everything downstream is identical,
+   which is the whole point — one set of rates, two ways to collect. */
+export type Qty = { code: string; qty: number };
+export type SpecialtyLine = { key: string; code: string; qty: number };
+export const newSpecialty = (code: string): SpecialtyLine =>
+  ({ key: Math.random().toString(36).slice(2), code, qty: 0 });
+
 export type JobSettings = {
   condition: string; coats: string; color: string; occupancy: string;
   access: string; texture: string; sheen: string; project_type: string;
@@ -61,6 +70,11 @@ export type JobSettings = {
   door_scope: string; window_scope: string;
   business_type: string;
   miles: number; days_on_site: number;
+  mode: 'room' | 'takeoff';
+  /* Detailed Takeoff quantities, entered directly */
+  takeoff: Record<string, number>;
+  specialty: SpecialtyLine[];
+  notes: string;
 };
 
 const rate = (rates: Rate[], code: string) => rates.find((r) => r.code === code);
@@ -116,6 +130,34 @@ export function roomWarnings(r: Room): string[] {
   return out;
 }
 
+/** Room-Based: turn rooms into the same quantity list Takeoff produces. */
+export function roomsToQuantities(rooms: Room[], job: JobSettings): Qty[] {
+  let wallSF = 0, ceilingSF = 0, baseLF = 0, crownLF = 0, doors = 0, windows = 0, closets = 0;
+  for (const r of rooms) {
+    const q = roomQuantities(r);
+    wallSF += q.wallSF; ceilingSF += q.ceilingSF; baseLF += q.baseLF; crownLF += q.crownLF;
+    doors += q.doors; windows += q.windows; closets += q.closets;
+  }
+  return [
+    { code: 'walls_smooth', qty: wallSF },
+    { code: 'ceiling_smooth', qty: ceilingSF },
+    { code: 'baseboard', qty: baseLF },
+    { code: 'crown', qty: crownLF },
+    { code: job.door_scope, qty: doors },
+    { code: job.window_scope, qty: windows },
+    { code: 'closet', qty: closets },
+  ].filter((q) => q.qty > 0);
+}
+
+/** Detailed Takeoff: the rep's own numbers, already in quantity form. */
+export function takeoffToQuantities(job: JobSettings): Qty[] {
+  const out: Qty[] = Object.entries(job.takeoff || {})
+    .filter(([, v]) => Number(v) > 0)
+    .map(([code, v]) => ({ code, qty: Number(v) }));
+  for (const s of job.specialty || []) if (s.qty > 0) out.push({ code: s.code, qty: s.qty });
+  return out;
+}
+
 export function laborMultiplier(mods: Modifier[], s: JobSettings) {
   const coats = mod(mods, 'coats', s.coats)?.multiplier ?? 1.7;
   const primerAdd = s.primer ? 0.7 : 0;
@@ -138,29 +180,25 @@ export function priceEstimate(opts: {
 }) {
   const { rooms, rates, mods, settings, job, paintCost, margin, minimum } = opts;
   const coatCount = Number(job.coats) || 2;
+  const byCode = new Map(rates.map((r) => [r.code, r]));
 
-  const walls   = rate(rates, job.texture === 'popcorn' ? 'walls_smooth' : 'walls_smooth')!;
-  const ceiling = rate(rates, 'ceiling_smooth')!;
-  const base    = rate(rates, 'baseboard')!;
-  const crown   = rate(rates, 'crown')!;
-  const door    = rate(rates, job.door_scope)   || rate(rates, 'door_full')!;
-  const win     = rate(rates, job.window_scope) || rate(rates, 'window_casing_sill')!;
-  const closet  = rate(rates, 'closet')!;
+  const quantities = job.mode === 'takeoff'
+    ? takeoffToQuantities(job)
+    : roomsToQuantities(rooms, job);
 
   let hours = 0, finishGal = 0, primerArea = 0;
+  const lines: { label: string; qty: number; unit: string; hours: number; gallons: number }[] = [];
 
-  for (const r of rooms) {
-    const q = roomQuantities(r);
-    const parts: [number, Rate | undefined][] = [
-      [q.wallSF, walls], [q.ceilingSF, ceiling], [q.baseLF, base],
-      [q.crownLF, crown], [q.doors, door], [q.windows, win], [q.closets, closet],
-    ];
-    for (const [qty, ri] of parts) {
-      if (!ri || !qty) continue;
-      hours += qty / ri.production_rate;
-      if (ri.coverage) finishGal += (qty / ri.coverage) * coatCount;
-    }
-    primerArea += q.wallSF + q.ceilingSF;
+  for (const q of quantities) {
+    const r = byCode.get(q.code);
+    if (!r || !q.qty) continue;
+    const h = q.qty / r.production_rate;
+    const g = r.coverage ? (q.qty / r.coverage) * coatCount : 0;
+    hours += h; finishGal += g;
+    // primer goes on the broad surfaces, not on trim counts
+    if (r.code === 'walls_smooth' || r.code === 'walls_textured' ||
+        r.code === 'ceiling_smooth' || r.code === 'ceiling_textured') primerArea += q.qty;
+    lines.push({ label: r.label, qty: q.qty, unit: r.unit, hours: h, gallons: g });
   }
 
   const mult = laborMultiplier(mods, job);
@@ -168,7 +206,8 @@ export function priceEstimate(opts: {
   const setupHours = settings['setup_hours_per_job'] ?? 2;
   const totalHours = fieldHours + setupHours;
 
-  const primerGal = job.primer && walls.coverage ? primerArea / walls.coverage : 0;
+  const wallRate = byCode.get('walls_smooth');
+  const primerGal = job.primer && wallRate?.coverage ? primerArea / wallRate.coverage : 0;
 
   const laborRate = settings['loaded_labor_rate'] ?? 35.75;
   const laborCost = totalHours * laborRate;
@@ -181,6 +220,7 @@ export function priceEstimate(opts: {
   const price = Math.max(calculated, minimum);
 
   return {
+    lines, quantities,
     rawHours: hours, multiplier: mult, fieldHours, totalHours,
     manDays: totalHours / 8,
     finishGal, primerGal, laborCost, paint, sundries, travel,
