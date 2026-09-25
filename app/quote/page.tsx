@@ -6,14 +6,19 @@ import Chrome from '@/components/Chrome';
 import { divisionColor } from '@/lib/theme';
 
 const money = (n: number) => '$' + Math.round(n || 0).toLocaleString();
+const tradeOf = (e: any) => (e?.settings?.trade as string) || 'painting';
+const pathFor = (e: any) => {
+  const t = tradeOf(e);
+  return t === 'drywall' ? '/quote/drywall' : t === 'deck' ? '/quote/deck' : '/quote/new';
+};
 
 export default function QuoteList() {
   const router = useRouter();
   const [rows, setRows] = useState<any[]>([]);
   useEffect(() => {
-    supabase.from('v_estimate_pipeline').select('*')
+    supabase.from('estimates').select('id,price,status,division,service_type,settings,created_at,sent_at,contacts(first_name,last_name),properties(address_line1,city)')
       .order('created_at', { ascending: false }).limit(60)
-      .then(({ data }) => setRows(data || []));
+      .then(({ data }) => setRows((data as any) || []));
   }, []);
 
   return (
@@ -21,7 +26,7 @@ export default function QuoteList() {
       <div className="bar">
         <div>
           <h1>Quotes</h1>
-          <div className="sub">Price it on site, before you leave.</div>
+          <div className="sub">Tap any quote to pick it back up.</div>
         </div>
       </div>
       <div className="main">
@@ -31,13 +36,19 @@ export default function QuoteList() {
             Start one and it lands here.
           </div>
         ) : rows.map((e) => (
-          <button className="row" key={e.id} onClick={() => router.push(`/quote/new?id=${e.id}`)}>
-            <div className="t1">{money(e.price)} · {e.customer?.trim() || 'No name'}</div>
-            <div className="t2">{e.address_line1}{e.city ? `, ${e.city}` : ''}</div>
+          <button className="row" key={e.id} onClick={() => router.push(`${pathFor(e)}?id=${e.id}`)}>
+            <div className="t1">
+              {money(e.price)} · {`${e.contacts?.first_name ?? ''} ${e.contacts?.last_name ?? ''}`.trim() || 'No name'}
+            </div>
+            <div className="t2">
+              {e.properties?.address_line1}{e.properties?.city ? `, ${e.properties.city}` : ''}
+            </div>
             <div className="tagrow">
-              <span className="tag accent" style={{ ["--accent" as any]: divisionColor(e.division) }}>{e.division?.replace('_', ' ')}</span>
+              <span className="tag accent" style={{ ["--accent" as any]: divisionColor(e.division) }}>
+                {tradeOf(e)}
+              </span>
               <span className="tag">{e.status}</span>
-              {e.days_since_sent != null && <span className="tag">sent {e.days_since_sent}d ago</span>}
+              {e.status === 'draft' && <span className="tag due">unfinished</span>}
             </div>
           </button>
         ))}

@@ -1,8 +1,10 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
+import DraftBanner from '@/components/DraftBanner';
+import { useAutosave, useRecovered, clearDraft } from '@/lib/draft';
 import { accentStyle } from '@/lib/theme';
 import { useTradeMargins } from '@/lib/margin';
 import { priceDeck, deckWarnings, newDeckLine, DeckJob, Surface, Product, Mod } from '@/lib/deck';
@@ -15,8 +17,11 @@ const CATS: [string, string][] = [
 /* A plain deck, preloaded. Everything else is one tap away. */
 const STARTER = ['wash', 'floor', 'rail_cap', 'spindles_coat', 'stair_tread', 'fascia'];
 
-export default function DeckQuote() {
+function DeckQuoteInner() {
   const router = useRouter();
+  const params = useSearchParams();
+  const estimateId = params.get('id');
+  const [loaded, setLoaded] = useState(false);
   const [surfaces, setSurfaces] = useState<Surface[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [mods, setMods] = useState<Mod[]>([]);
@@ -44,6 +49,23 @@ export default function DeckQuote() {
       const surf = ((s.data as any) || []) as Surface[];
       setSurfaces(surf); setProducts((p.data as any) || []); setMods((m.data as any) || []);
       setSettings(Object.fromEntries((bs.data || []).map((x: any) => [x.key, Number(x.value)])));
+      if (estimateId) {
+        const { data: est } = await supabase.from('estimates')
+          .select('*,contacts(first_name,last_name,phone),properties(address_line1,city)')
+          .eq('id', estimateId).single();
+        if (est?.settings) {
+          const { trade, ...saved } = est.settings as any;
+          setJob((j) => ({ ...j, ...saved }));
+          setWho({
+            name: `${(est as any).contacts?.first_name ?? ''} ${(est as any).contacts?.last_name ?? ''}`.trim(),
+            phone: (est as any).contacts?.phone ?? '',
+            address: (est as any).properties?.address_line1 ?? '',
+            city: (est as any).properties?.city ?? '',
+          });
+          setLoaded(true);
+          return;
+        }
+      }
       setJob((j) => ({
         ...j,
         lines: STARTER.map((c) => {
@@ -52,8 +74,9 @@ export default function DeckQuote() {
             c === 'rail_cap' || c === 'spindles_coat' ? 'semi_trans' : 'semi_trans');
         }).filter((l) => surf.some((x) => x.code === l.code)),
       }));
+      setLoaded(true);
     })();
-  }, []);
+  }, [estimateId]);
 
   const bt = findMargin(job.businessType);
   const out = useMemo(() => {
@@ -68,6 +91,8 @@ export default function DeckQuote() {
   }, [job, surfaces, products, mods, settings, bt]);
 
   const warnings = useMemo(() => deckWarnings(job, surfaces), [job, surfaces]);
+  useAutosave('deck', estimateId, { job, who }, loaded);
+  const { found, dismiss } = useRecovered<{ job: any; who: any }>('deck', estimateId, loaded);
   const opt = (g: string) => mods.filter((m) => m.group_code === g);
   const inJob = (code: string) => job.lines.some((l) => l.code === code);
 
@@ -82,6 +107,18 @@ export default function DeckQuote() {
 
   async function save() {
     setSaving(true);
+    const payload = {
+      settings: { trade: 'deck', ...job } as any,
+      labor_hours: out!.totalHours, labor_cost: out!.laborCost,
+      material_cost: out!.materialCost + out!.sundries,
+      direct_cost: out!.direct, target_margin: bt?.target_margin, price: out!.price,
+      notes: `Deck — ${out!.totalHours.toFixed(0)} hrs, ${out!.totalGallons.toFixed(1)} gal`,
+    };
+    if (estimateId) {
+      await supabase.from('estimates').update(payload).eq('id', estimateId);
+      clearDraft('deck', estimateId);
+      setSaving(false); router.push('/quote'); return;
+    }
     const contactId = who.phone || who.name
       ? (await supabase.rpc('find_or_create_contact', {
           p_phone: who.phone || null, p_email: null,
@@ -97,13 +134,9 @@ export default function DeckQuote() {
     await supabase.from('estimates').insert({
       contact_id: contactId, property_id: propertyId,
       division: 'painting', service_type: 'exterior',
-      business_type: job.businessType, status: 'draft',
-      settings: { trade: 'deck', ...job } as any,
-      labor_hours: out!.totalHours, labor_cost: out!.laborCost,
-      material_cost: out!.materialCost + out!.sundries,
-      direct_cost: out!.direct, target_margin: bt?.target_margin, price: out!.price,
-      notes: `Deck — ${out!.totalHours.toFixed(0)} hrs, ${out!.totalGallons.toFixed(1)} gal`,
+      business_type: job.businessType, status: 'draft', ...payload,
     });
+    clearDraft('deck', null);
     setSaving(false); router.push('/quote');
   }
 
@@ -112,11 +145,19 @@ export default function DeckQuote() {
       <div style={accentStyle('painting')}>
         <div className="bar">
           <button className="back" onClick={() => router.push('/quote')}>{'\u2190'} Quotes</button>
-          <div><h1>Deck</h1><div className="sub">Decks, porches and screened rooms</div></div>
+          <div>
+            <h1>Deck</h1>
+            <div className="sub">{estimateId ? 'Editing a saved quote' : 'Decks, porches and screened rooms'}</div>
+          </div>
         </div>
         <div className="divstrip" />
 
         <div className="main">
+          {found && (
+            <DraftBanner at={found.at}
+              onRestore={() => { setJob(found.data.job); setWho(found.data.who); dismiss(); }}
+              onDiscard={dismiss} />
+          )}
           <div className="section-label">Customer</div>
           <div className="field">
             <div className="grid3" style={{ gridTemplateColumns: '1fr 1fr' }}>
@@ -264,4 +305,8 @@ export default function DeckQuote() {
       </div>
     </Chrome>
   );
+}
+
+export default function DeckQuote() {
+  return <Suspense fallback={null}><DeckQuoteInner /></Suspense>;
 }

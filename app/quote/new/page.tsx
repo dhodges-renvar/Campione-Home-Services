@@ -3,6 +3,8 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
+import DraftBanner from '@/components/DraftBanner';
+import { useAutosave, useRecovered, clearDraft } from '@/lib/draft';
 import { accentStyle } from '@/lib/theme';
 import { useTradeMargins } from '@/lib/margin';
 import {
@@ -16,6 +18,8 @@ function NewQuoteInner() {
   const router = useRouter();
   const params = useSearchParams();
   const leadId = params.get('lead');
+  const estimateId = params.get('id');
+  const [loaded, setLoaded] = useState(false);
   const [rates, setRates] = useState<Rate[]>([]);
   const [mods, setMods] = useState<Modifier[]>([]);
   const [settings, setSettings] = useState<Settings>({});
@@ -61,6 +65,36 @@ function NewQuoteInner() {
       setMods((m.data as any) || []);
       setSettings(Object.fromEntries((s.data || []).map((x: any) => [x.key, Number(x.value)])));
       setPaints(p.data || []);
+      if (estimateId) {
+        const { data: est } = await supabase.from('estimates')
+          .select('*,contacts(first_name,last_name,phone),properties(address_line1,city)')
+          .eq('id', estimateId).single();
+        const { data: rm } = await supabase.from('estimate_rooms')
+          .select('*').eq('estimate_id', estimateId).order('sort_order');
+        if (est?.settings) setJob((j) => ({ ...j, ...(est.settings as any) }));
+        if (est) setWho({
+          name: `${(est as any).contacts?.first_name ?? ''} ${(est as any).contacts?.last_name ?? ''}`.trim(),
+          phone: (est as any).contacts?.phone ?? '',
+          address: (est as any).properties?.address_line1 ?? '',
+          city: (est as any).properties?.city ?? '',
+        });
+        if (rm?.length) setRooms(rm.map((r: any) => ({
+          key: r.id, name: r.room_name, mode: r.mode ?? 'rect',
+          length: Number(r.length_ft) || 0, width: Number(r.width_ft) || 0,
+          height: Number(r.ceiling_ht_ft) || 9,
+          perimeterFt: Number(r.perimeter_ft) || 0,
+          wallRuns: r.walls ?? [{ len: 0, ht: Number(r.ceiling_ht_ft) || 9 }],
+          ceilingSf: r.ceiling_sf != null ? Number(r.ceiling_sf) : null,
+          deductSf: Number(r.deduct_sf) || 0, vaultAddSf: Number(r.vault_add_sf) || 0,
+          doors: r.door_count ?? 0, windows: r.window_count ?? 0, closets: r.closet_count ?? 0,
+          walls: r.paint_walls, ceiling: r.paint_ceiling, base: r.paint_base,
+          crown: r.paint_crown, paintDoors: r.paint_doors,
+          paintWindows: r.paint_window_trim, paintClosets: r.paint_closets,
+        })));
+        setLoaded(true);
+        return;
+      }
+      setLoaded(true);
       if (s.data) setJob((j) => ({
         ...j,
         miles: Number((s.data as any).find((x: any) => x.key === 'default_round_trip_miles')?.value ?? 40),
@@ -88,6 +122,33 @@ function NewQuoteInner() {
 
   async function save() {
     setSaving(true);
+    const priced = {
+      settings: job as any,
+      labor_hours: out!.totalHours, labor_multiplier: out!.multiplier,
+      finish_gallons: out!.finishGal, primer_gallons: out!.primerGal,
+      labor_cost: out!.laborCost, material_cost: out!.paint + out!.sundries,
+      travel_cost: out!.travel, direct_cost: out!.direct,
+      target_margin: bt?.target_margin, price: out!.price,
+    };
+    const roomRows = (eid: string) => rooms.map((r, i) => ({
+      estimate_id: eid, room_name: r.name, mode: r.mode,
+      perimeter_ft: r.mode === 'perimeter' ? r.perimeterFt : null,
+      walls: r.mode === 'walls' ? r.wallRuns : null,
+      ceiling_sf: r.ceilingSf, deduct_sf: r.deductSf, vault_add_sf: r.vaultAddSf,
+      length_ft: r.length, width_ft: r.width, ceiling_ht_ft: r.height,
+      door_count: r.doors, window_count: r.windows, closet_count: r.closets,
+      paint_walls: r.walls, paint_ceiling: r.ceiling, paint_base: r.base,
+      paint_crown: r.crown, paint_doors: r.paintDoors,
+      paint_window_trim: r.paintWindows, paint_closets: r.paintClosets,
+      sort_order: i,
+    }));
+    if (estimateId) {
+      await supabase.from('estimates').update(priced).eq('id', estimateId);
+      await supabase.from('estimate_rooms').delete().eq('estimate_id', estimateId);
+      await supabase.from('estimate_rooms').insert(roomRows(estimateId));
+      clearDraft('painting', estimateId);
+      setSaving(false); router.push('/quote'); return;
+    }
     const contactId = who.phone || who.name
       ? (await supabase.rpc('find_or_create_contact', {
           p_phone: who.phone || null, p_email: null,
@@ -133,19 +194,36 @@ function NewQuoteInner() {
         sort_order: i,
       })));
     }
+    clearDraft('painting', null);
     setSaving(false);
     router.push('/quote');
   }
+
+  useAutosave('painting', estimateId, { job, who, rooms }, loaded);
+  const { found, dismiss } = useRecovered<{ job: any; who: any; rooms: any[] }>(
+    'painting', estimateId, loaded);
 
   return (
     <Chrome>
       <div style={accentStyle('painting')}>
         <div className="bar">
           <button className="back" onClick={() => router.push('/quote')}>{'\u2190'} Quotes</button>
-          <div><h1>New quote</h1><div className="sub">Interior painting</div></div>
+          <div>
+            <h1>{estimateId ? 'Edit quote' : 'New quote'}</h1>
+            <div className="sub">Interior painting</div>
+          </div>
         </div>
         <div className="divstrip" />
         <div className="main">
+          {found && (
+            <DraftBanner at={found.at}
+              onRestore={() => {
+                setJob(found.data.job); setWho(found.data.who);
+                if (found.data.rooms?.length) setRooms(found.data.rooms);
+                dismiss();
+              }}
+              onDiscard={dismiss} />
+          )}
           <div className="section-label">Customer</div>
           <div className="grid3" style={{ padding: 18, gridTemplateColumns: '1fr 1fr' }}>
             <div><label>Name</label><input value={who.name} onChange={(e) => setWho({ ...who, name: e.target.value })} /></div>
