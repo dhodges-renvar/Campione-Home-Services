@@ -123,7 +123,8 @@ export default function ProspectDetail() {
             <div className="setting">
               <label>Type</label>
               <select value={ef.kind} onChange={(e) => setEf({ ...ef, kind: e.target.value })}>
-                {['home_builder','remodeler','general_contractor','property_manager','realtor','commercial','other']
+                {['home_builder','remodeler','general_contractor','interior_designer',
+                  'architect','stager','property_manager','realtor','commercial','other']
                   .map((k) => <option key={k} value={k}>{k.replace(/_/g,' ')}</option>)}
               </select>
             </div>

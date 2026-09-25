@@ -6,8 +6,9 @@ import Chrome from '@/components/Chrome';
 
 const FILTERS: [string, string][] = [
   ['all', 'All'], ['home_builder', 'Builders'], ['property_manager', 'Property mgrs'],
-  ['remodeler', 'Remodelers'], ['general_contractor', 'GCs'], ['commercial', 'Commercial'],
-  ['__enrich', 'Needs research'],
+  ['interior_designer', 'Designers'], ['remodeler', 'Remodelers'],
+  ['general_contractor', 'GCs'], ['realtor', 'Realtors'], ['architect', 'Architects'],
+  ['stager', 'Stagers'], ['commercial', 'Commercial'], ['__enrich', 'Needs research'],
 ];
 
 export default function Builders() {
