@@ -5,13 +5,14 @@ import Chrome from '@/components/Chrome';
 import { useRouter } from 'next/navigation';
 import { divisionColor, DIVISION_LABEL } from '@/lib/theme';
 
-type Panel = 'margins' | 'paint' | 'rates' | 'drywall' | 'modifiers' | 'business' | 'checklists' | 'people';
+type Panel = 'margins' | 'paint' | 'rates' | 'drywall' | 'deck' | 'modifiers' | 'business' | 'checklists' | 'people';
 
 const PANELS: [Panel, string, string][] = [
   ['margins',    'Margins & minimums', 'By trade, then by customer type'],
   ['paint',      'Paint prices',       'Cost per gallon by product'],
   ['rates',      'Production rates',   'How fast the crews cover ground'],
   ['drywall',    'Drywall prices',     'Board prices, labor per board, materials'],
+  ['deck',       'Deck prices',        'Surface rates, coverage, stain and paint'],
   ['modifiers',  'Job conditions',     'Prep, coats, access, sheen multipliers'],
   ['business',   'Labor & overhead',   'Hourly cost, mileage, sundries'],
   ['checklists', 'QC checklists',      'What crews check before closing a job'],
@@ -53,6 +54,7 @@ export default function Setup() {
         {panel === 'paint'      && <Paint flash={flash} />}
         {panel === 'rates'      && <Rates flash={flash} />}
         {panel === 'drywall'    && <Drywall flash={flash} />}
+        {panel === 'deck'       && <Deck flash={flash} />}
         {panel === 'modifiers'  && <Mods flash={flash} />}
         {panel === 'business'   && <Business flash={flash} />}
         {panel === 'checklists' && <Checklists flash={flash} />}
@@ -278,6 +280,59 @@ function Drywall({ flash }: any) {
               <Num value={m.coverage} onSave={(v: number) => saveM(m.id, { coverage: v })} />
             </div>
           )}
+        </div>
+      ))}
+    </>
+  );
+}
+
+function Deck({ flash }: any) {
+  const [surf, setSurf] = useState<any[]>([]);
+  const [prod, setProd] = useState<any[]>([]);
+  const [tab, setTab] = useState<'surfaces' | 'products'>('surfaces');
+  useEffect(() => {
+    supabase.from('deck_surfaces').select('*').order('sort_order').then(({ data }) => setSurf(data || []));
+    supabase.from('deck_products').select('*').order('sort_order').then(({ data }) => setProd(data || []));
+  }, []);
+  async function saveS(id: string, patch: any) {
+    await supabase.from('deck_surfaces').update(patch).eq('id', id);
+    setSurf((r) => r.map((x) => (x.id === id ? { ...x, ...patch } : x))); flash('Saved');
+  }
+  async function saveP(id: string, patch: any) {
+    await supabase.from('deck_products').update(patch).eq('id', id);
+    setProd((r) => r.map((x) => (x.id === id ? { ...x, ...patch } : x))); flash('Saved');
+  }
+  return (
+    <>
+      <div className="chips" style={{ padding: '14px 20px' }}>
+        <button className="chip" data-on={tab === 'surfaces' ? '1' : '0'} onClick={() => setTab('surfaces')}>Surfaces</button>
+        <button className="chip" data-on={tab === 'products' ? '1' : '0'} onClick={() => setTab('products')}>Stain &amp; paint</button>
+      </div>
+      {tab === 'surfaces' ? surf.map((s) => (
+        <div key={s.id}>
+          <div className="setting">
+            <div><label>{s.label}</label>
+              <div className="hintl">{s.category} · {s.unit} per hour, per coat</div></div>
+            <Num value={s.production_rate} onSave={(v: number) => saveS(s.id, { production_rate: v })} />
+          </div>
+          {s.coverage != null && (
+            <div className="setting" style={{ paddingLeft: 34 }}>
+              <label style={{ fontSize: 14, color: 'var(--ink-3)' }}>{s.unit} per gallon</label>
+              <Num value={s.coverage} onSave={(v: number) => saveS(s.id, { coverage: v })} />
+            </div>
+          )}
+          {Number(s.material_cost) > 0 && (
+            <div className="setting" style={{ paddingLeft: 34 }}>
+              <label style={{ fontSize: 14, color: 'var(--ink-3)' }}>Material per {s.unit}</label>
+              <Num value={s.material_cost} prefix="$" onSave={(v: number) => saveS(s.id, { material_cost: v })} />
+            </div>
+          )}
+        </div>
+      )) : prod.map((p) => (
+        <div className="setting" key={p.id}>
+          <div><label>{p.label}</label>
+            {p.notes && <div className="hintl">{p.notes}</div>}</div>
+          <Num value={p.cost_per_gallon} prefix="$" onSave={(v: number) => saveP(p.id, { cost_per_gallon: v })} />
         </div>
       ))}
     </>

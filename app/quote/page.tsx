@@ -43,7 +43,8 @@ export default function QuoteList() {
         ))}
       </div>
       <div className="dock"><div className="inner">
-        <div className="pair" style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn ghost" onClick={() => router.push('/quote/deck')}>Deck</button>
           <button className="btn ghost" onClick={() => router.push('/quote/drywall')}>Drywall</button>
           <button className="btn" onClick={() => router.push('/quote/new')}>Painting</button>
         </div>
