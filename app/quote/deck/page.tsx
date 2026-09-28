@@ -3,6 +3,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
+import ProposalSections, { Sections, emptySections } from '@/components/ProposalSections';
 import DraftBanner from '@/components/DraftBanner';
 import { useAutosave, useRecovered, clearDraft } from '@/lib/draft';
 import { accentStyle } from '@/lib/theme';
@@ -31,6 +32,7 @@ function DeckQuoteInner() {
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sections, setSections] = useState<Sections>(emptySections());
 
   const [job, setJob] = useState<DeckJob>({
     lines: [], condition: 'good', prevFinish: 'semi', access: 'ground',
@@ -108,6 +110,8 @@ function DeckQuoteInner() {
   async function save() {
     setSaving(true);
     const payload = {
+      scope_notes: sections.scope || null, exclusions: sections.exclusions || null,
+      customer_responsibilities: sections.customer || null, internal_notes_v2: sections.internal || null,
       settings: { trade: 'deck', ...job } as any,
       labor_hours: out!.totalHours, labor_cost: out!.laborCost,
       material_cost: out!.materialCost + out!.sundries,
@@ -257,6 +261,9 @@ function DeckQuoteInner() {
                 onClick={() => set(k as any, !(job as any)[k])}>{(job as any)[k] ? 'Yes' : 'No'}</button>
             </div>
           ))}
+
+          <div className="section-label">Proposal</div>
+          <ProposalSections trade="deck" value={sections} onChange={setSections} />
 
           {out && (
             <>

@@ -3,6 +3,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
+import ProposalSections, { Sections, emptySections } from '@/components/ProposalSections';
 import DraftBanner from '@/components/DraftBanner';
 import { useAutosave, useRecovered, clearDraft } from '@/lib/draft';
 import { accentStyle } from '@/lib/theme';
@@ -37,6 +38,7 @@ function NewQuoteInner() {
   const { rows: btypes, find: findMargin } = useTradeMargins('painting');
   const [rooms, setRooms] = useState<Room[]>([emptyRoom(1)]);
   const [saving, setSaving] = useState(false);
+  const [sections, setSections] = useState<Sections>(emptySections());
   const [who, setWho] = useState<Who>({ name: '', phone: '', address: '', city: '' });
   const [specOpen, setSpecOpen] = useState(false);
   const [heatedSf, setHeatedSf] = useState(0);
@@ -146,6 +148,8 @@ function NewQuoteInner() {
       takeoff_mode: job.mode,
       takeoff: { takeoff: job.takeoff, specialty: job.specialty } as any,
       project_notes: job.notes || null,
+      scope_notes: sections.scope || null, exclusions: sections.exclusions || null,
+      customer_responsibilities: sections.customer || null, internal_notes_v2: sections.internal || null,
       labor_hours: out!.totalHours, labor_multiplier: out!.multiplier,
       finish_gallons: out!.finishGal, primer_gallons: out!.primerGal,
       labor_cost: out!.laborCost, material_cost: out!.paint + out!.sundries,
@@ -195,6 +199,8 @@ function NewQuoteInner() {
       business_type: job.business_type, status: 'draft',
       takeoff_mode: job.mode, takeoff: { takeoff: job.takeoff, specialty: job.specialty } as any,
       project_notes: job.notes || null,
+      scope_notes: sections.scope || null, exclusions: sections.exclusions || null,
+      customer_responsibilities: sections.customer || null, internal_notes_v2: sections.internal || null,
       settings: job as any,
       labor_hours: out!.totalHours, labor_multiplier: out!.multiplier,
       finish_gallons: out!.finishGal, primer_gallons: out!.primerGal,
@@ -306,11 +312,18 @@ function NewQuoteInner() {
                 </div>
 
                 <div className="chips" style={{ marginTop: 0, marginBottom: 14 }}>
-                  {([['rect','Four walls'],['perimeter','Measure the run'],['walls','Wall by wall']] as [MeasureMode,string][])
+                  {([['rect','Four walls'],['perimeter','Total wall run'],['walls','Wall by wall']] as [MeasureMode,string][])
                     .map(([m, lbl]) => (
                       <button key={m} className="chip" data-on={r.mode === m ? '1' : '0'}
                         onClick={() => setRoom(r.key, { mode: m })}>{lbl}</button>
                   ))}
+                <div className="t2" style={{ marginTop: 8 }}>
+                  {r.mode === 'rect'
+                    ? 'A box. Length x width x height. Fastest when the room actually is one.'
+                    : r.mode === 'perimeter'
+                    ? 'ONE number: walk the whole room and add the wall lengths together. Use when the room is not a box but every wall is the same height — L-shapes, bays, angles.'
+                    : 'ONE LINE PER WALL, each with its own height. Use when heights differ — a two-story foyer, a half wall, a stairwell.'}
+                </div>
                 </div>
 
                 {r.mode === 'rect' && (
@@ -328,7 +341,7 @@ function NewQuoteInner() {
                       <div><label>Ceiling ht</label><input type="number" inputMode="decimal" value={r.height || ''} onChange={(e) => setRoom(r.key, { height: +e.target.value })} /></div>
                     </div>
                     <div className="hintl" style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 8 }}>
-                      Walk the walls with a measuring wheel or laser. Works for L-shapes, open concept, bays and angles.
+                      Add every wall length together and enter the total. One number, one height.
                     </div>
                   </>
                 )}
@@ -351,7 +364,7 @@ function NewQuoteInner() {
                       + Add a wall
                     </button>
                     <div className="hintl" style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 8 }}>
-                      Each wall gets its own height. Use this for two-story foyers, half walls and stairwells.
+                      One line per wall, each with its own height. Only worth it when the heights are different.
                     </div>
                   </>
                 )}
@@ -499,6 +512,9 @@ function NewQuoteInner() {
               </div>
             );
           })()}
+
+          <div className="section-label">Proposal</div>
+          <ProposalSections trade="painting" value={sections} onChange={setSections} />
 
           <div className="section-label">Project notes</div>
           <div className="field">

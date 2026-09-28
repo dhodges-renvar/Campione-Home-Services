@@ -3,6 +3,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Chrome from '@/components/Chrome';
+import ProposalSections, { Sections, emptySections } from '@/components/ProposalSections';
 import DraftBanner from '@/components/DraftBanner';
 import { useAutosave, useRecovered, clearDraft } from '@/lib/draft';
 import { accentStyle } from '@/lib/theme';
@@ -30,6 +31,7 @@ function DrywallQuoteInner() {
   const { rows: btypes, find: findMargin } = useTradeMargins('drywall');
   const [who, setWho] = useState({ name: '', phone: '', address: '', city: '' });
   const [saving, setSaving] = useState(false);
+  const [sections, setSections] = useState<Sections>(emptySections());
   const [showDetail, setShowDetail] = useState(false);
 
   const [job, setJob] = useState<DrywallJob>({
@@ -39,6 +41,7 @@ function DrywallQuoteInner() {
     level: '4', access: 'standard', openings: 0,
     beads: BEADS.map((code) => ({ code, pieces: 0 })),
     dumpster: 0, touchPrime: 4, touchFinal: 4, touchQc: 3, touchHome: 3,
+    touchDrywall: 3, extraSand: 2,
     wastePct: 0.12, businessType: 'consumer', picks: {},
   });
   const set = (k: keyof DrywallJob, v: any) => setJob((j) => ({ ...j, [k]: v }));
@@ -66,6 +69,8 @@ function DrywallQuoteInner() {
         touchFinal: sx['dw_touchup_final'] ?? 4,
         touchQc: sx['dw_touchup_qc'] ?? 3,
         touchHome: sx['dw_touchup_homeowner'] ?? 3,
+        touchDrywall: sx['dw_touchup_hours'] ?? 3,
+        extraSand: sx['dw_extra_sand_hours'] ?? 2,
       }));
     })();
   }, []);
@@ -79,6 +84,8 @@ function DrywallQuoteInner() {
       sundriesPerHour: settings['sundries_per_hour'] ?? 3.5,
       margin: Number(bt?.target_margin ?? 0.45),
       minimum: Number(bt?.minimum_charge ?? 750),
+      minTripCharge: settings['dw_min_trip_charge'] ?? 212.5,
+      minTripBoards: settings['dw_min_trip_boards'] ?? 20,
     });
   }, [job, boards, materials, mods, settings, bt]);
 
@@ -88,6 +95,8 @@ function DrywallQuoteInner() {
   async function save() {
     setSaving(true);
     const payload = {
+      scope_notes: sections.scope || null, exclusions: sections.exclusions || null,
+      customer_responsibilities: sections.customer || null, internal_notes_v2: sections.internal || null,
       settings: { trade: 'drywall', ...job } as any,
       labor_hours: out!.impliedHours, labor_cost: out!.laborCost,
       material_cost: out!.materialCost + out!.sundries,
@@ -298,7 +307,8 @@ function DrywallQuoteInner() {
           ))}
 
           <div className="section-label">Touch-up budget — hours</div>
-          {([['touchPrime','After prime'],['touchFinal','Final walk'],
+          {([['touchDrywall','Drywall touch-up'],['extraSand','Extra sanding'],
+             ['touchPrime','After prime'],['touchFinal','Final walk'],
              ['touchQc','QC walk'],['touchHome','Homeowner walk']] as const).map(([k, l]) => (
             <div className="setting" key={k}>
               <label>{l}</label>
@@ -310,6 +320,9 @@ function DrywallQuoteInner() {
             <label>Debris removal</label>
             <input type="number" value={job.dumpster || ''} onChange={(e) => set('dumpster', +e.target.value)} />
           </div>
+
+          <div className="section-label">Proposal</div>
+          <ProposalSections trade="drywall" value={sections} onChange={setSections} />
 
           {out && (
             <>
@@ -329,8 +342,9 @@ function DrywallQuoteInner() {
                     </div>
                   ))}
                   <div style={{ borderTop: '1px solid var(--line)', marginTop: 10, paddingTop: 10 }}>
-                    {[['Hang', out.hang], ['Tape and finish', out.finish],
-                      ['Touch-ups and openings', out.hourlyLabor],
+                    {[['Hang', out.hang], ['Tape and finish', out.finish], ['Sand', out.sand],
+                      ['Touch-ups, sanding and openings', out.hourlyLabor],
+                      ...(out.tripApplies ? [['Minimum trip charge', out.tripCharge]] : []),
                       ['Materials', out.materialCost], ['Sundries', out.sundries],
                       ['Direct cost', out.direct], ['Gross profit', out.grossProfit]].map(([l, v]: any) => (
                       <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 15.5 }}>
@@ -350,6 +364,7 @@ function DrywallQuoteInner() {
               <div className="big">{money(out.price)}</div>
               <div className="r2">
                 <span><b>{out.totalBoards}</b> boards</span>
+                {out.tripApplies && <span style={{ color: '#FFD9A0' }}>trip charge applied</span>}
                 <span><b>{money(out.perSf)}</b>/sf</span>
                 <span><b>{money(out.perBoard)}</b>/board</span>
                 <span><b>{out.impliedHours.toFixed(0)}</b> hrs</span>

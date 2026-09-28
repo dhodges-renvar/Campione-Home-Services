@@ -7,7 +7,10 @@
 export type Board = {
   id: string; code: string; label: string; thickness: string;
   length_ft: number; width_ft: number; board_type: string; sf_per_board: number;
-  price_each: number; hang_each: number; finish_each: number; ceiling_ok: boolean;
+  price_each: number;
+  /* three crews, paid separately */
+  hang_each: number; finish_each: number; sand_each: number;
+  ceiling_ok: boolean;
 };
 export type Material = {
   id: string; code: string; label: string; category: string; unit: string;
@@ -41,6 +44,7 @@ export type DrywallJob = {
   beads: BeadLine[];
   dumpster: number;
   touchPrime: number; touchFinal: number; touchQc: number; touchHome: number;
+  touchDrywall: number; extraSand: number;
   wastePct: number;
   businessType: string;
   /* which material was picked in each option group: { tape: 'tape_paper', ... } */
@@ -63,6 +67,7 @@ export function defaultPicks(materials: Material[]): Record<string, string> {
 export function priceDrywall(o: {
   job: DrywallJob; boards: Board[]; materials: Material[]; mods: Mod[];
   laborRate: number; margin: number; minimum: number; sundriesPerHour: number;
+  minTripCharge?: number; minTripBoards?: number;
 }) {
   const { job, boards, materials, mods, laborRate, margin, minimum } = o;
   const waste = 1 + (job.wastePct || 0);
@@ -100,17 +105,19 @@ export function priceDrywall(o: {
   const totalBoards = wallBoards + ceilBoards;
   const totalSf = rows.reduce((a, r) => a + r.sf, 0);
 
-  // ---- labor ----
-  let hang = 0, finish = 0;
+  // ---- labor: hang, finish and sand are three crews ----
+  let hang = 0, finish = 0, sand = 0;
   for (const r of rows) {
     const m = r.ceiling ? ceilingMult : 1;
     hang   += r.qty * r.board.hang_each * m;
     finish += r.qty * r.board.finish_each * m * levelMult;
+    sand   += r.qty * (r.board.sand_each ?? 0) * m * levelMult;
   }
-  const boardLabor = (hang + finish) * accessMult;
+  const boardLabor = (hang + finish + sand) * accessMult;
 
   const touchHours = (job.touchPrime || 0) + (job.touchFinal || 0) +
-                     (job.touchQc || 0) + (job.touchHome || 0);
+                     (job.touchQc || 0) + (job.touchHome || 0) +
+                     (job.touchDrywall || 0) + (job.extraSand || 0);
   const openingHours = (job.openings || 0) * 0.15;
   const hourlyLabor = (touchHours + openingHours) * laborRate;
   const laborCost = boardLabor + hourlyLabor;
@@ -174,15 +181,19 @@ export function priceDrywall(o: {
   const impliedHours = laborRate > 0 ? laborCost / laborRate : 0;
   const sundries = impliedHours * (o.sundriesPerHour || 0);
 
-  const direct = laborCost + materialCost + sundries;
+  // a small job cannot carry its own mobilization
+  const tripApplies = totalBoards > 0 && totalBoards < (o.minTripBoards ?? 20);
+  const tripCharge  = tripApplies ? (o.minTripCharge ?? 0) : 0;
+
+  const direct = laborCost + materialCost + sundries + tripCharge;
   const calculated = margin < 1 ? direct / (1 - margin) : direct;
   const price = Math.max(calculated, minimum);
 
   return {
     wallBoards, ceilBoards, totalBoards, totalSf,
     levelMult, accessMult,
-    hang, finish, boardLabor, touchHours, openingHours, hourlyLabor,
-    laborCost, materialCost, sundries, lines,
+    hang, finish, sand, boardLabor, touchHours, openingHours, hourlyLabor,
+    laborCost, materialCost, sundries, tripCharge, tripApplies, lines,
     direct, price,
     grossProfit: price - direct,
     impliedHours,

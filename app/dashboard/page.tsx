@@ -10,7 +10,26 @@ const num = (n: any, d = 0) => (Number(n) || 0).toFixed(d);
 
 export default function Dashboard() {
   const router = useRouter();
-  const [days, setDays] = useState(30);
+  const [period, setPeriod] = useState('month');
+  const [custom, setCustom] = useState({ from: '', to: '' });
+  const PERIODS: [string, string, number][] = [
+    ['today', 'Today', 1], ['week', 'Week', 7], ['month', 'Month', 30],
+    ['quarter', 'Quarter', 91], ['ytd', 'YTD', 0], ['custom', 'Custom', 0],
+  ];
+  const daysFor = () => {
+    if (period === 'ytd') {
+      const jan = new Date(new Date().getFullYear(), 0, 1);
+      return Math.max(1, Math.ceil((Date.now() - jan.getTime()) / 864e5));
+    }
+    if (period === 'custom') {
+      if (!custom.from) return 30;
+      const from = new Date(custom.from).getTime();
+      const to = custom.to ? new Date(custom.to).getTime() : Date.now();
+      return Math.max(1, Math.ceil((to - from) / 864e5));
+    }
+    return PERIODS.find((p) => p[0] === period)?.[2] ?? 30;
+  };
+  const days = daysFor();
   const [k, setK] = useState<any>(null);
   const [quotes, setQuotes] = useState<any[]>([]);
   const [live, setLive] = useState<any[]>([]);
@@ -59,16 +78,32 @@ export default function Dashboard() {
       <div className="bar">
         <div>
           <h1>Numbers</h1>
-          <div className="sub">Last {days} days</div>
+          <div className="sub">
+            {period === 'today' ? 'Today'
+              : period === 'ytd' ? `Year to date · ${days} days`
+              : period === 'custom' && custom.from ? `${custom.from} to ${custom.to || 'today'}`
+              : `Last ${days} days`}
+          </div>
         </div>
-        <select className="lang" value={days} onChange={(e) => setDays(+e.target.value)}
-          style={{ border: '1px solid var(--line)', borderRadius: 5, padding: '6px 8px' }}>
-          <option value={7}>7 days</option>
-          <option value={30}>30 days</option>
-          <option value={90}>90 days</option>
-          <option value={365}>12 months</option>
-        </select>
+
       </div>
+
+      <div className="chips" style={{ padding: '14px 20px 0' }}>
+        {PERIODS.map(([v, l]) => (
+          <button key={v} className="chip" data-on={period === v ? '1' : '0'}
+            onClick={() => setPeriod(v)}>{l}</button>
+        ))}
+      </div>
+      {period === 'custom' && (
+        <div className="field">
+          <div className="grid3" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div><label>From</label><input type="date" value={custom.from}
+              onChange={(e) => setCustom({ ...custom, from: e.target.value })} /></div>
+            <div><label>To</label><input type="date" value={custom.to}
+              onChange={(e) => setCustom({ ...custom, to: e.target.value })} /></div>
+          </div>
+        </div>
+      )}
 
       <div className="main">
         {qc.length > 0 && (
