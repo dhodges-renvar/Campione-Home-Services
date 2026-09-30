@@ -32,6 +32,9 @@ function DeckQuoteInner() {
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState('');
+  const [saveErr, setSaveErr] = useState('');
+  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 1800); };
   const [sections, setSections] = useState<Sections>(emptySections());
 
   const [job, setJob] = useState<DeckJob>({
@@ -119,9 +122,11 @@ function DeckQuoteInner() {
       notes: `Deck — ${out!.totalHours.toFixed(0)} hrs, ${out!.totalGallons.toFixed(1)} gal`,
     };
     if (estimateId) {
-      await supabase.from('estimates').update(payload).eq('id', estimateId);
-      clearDraft('deck', estimateId);
-      setSaving(false); router.push('/quote'); return;
+      const { error } = await supabase.from('estimates').update(payload).eq('id', estimateId);
+      setSaving(false);
+      if (error) { setSaveErr(error.message); return; }
+      clearDraft('deck', estimateId); setSaveErr(''); flash('Saved');
+      return;
     }
     const contactId = who.phone || who.name
       ? (await supabase.rpc('find_or_create_contact', {
@@ -135,13 +140,15 @@ function DeckQuoteInner() {
         .insert({ address_line1: who.address, city: who.city || null }).select('id').single();
       propertyId = data?.id ?? null;
     }
-    await supabase.from('estimates').insert({
+    const { data: est, error: insErr } = await (supabase.from('estimates').insert({
       contact_id: contactId, property_id: propertyId,
       division: 'painting', service_type: 'exterior',
       business_type: job.businessType, status: 'draft', ...payload,
-    });
+    }) as any).select('id').single();
     clearDraft('deck', null);
-    setSaving(false); router.push('/quote');
+    setSaving(false);
+    if (insErr) { setSaveErr(insErr.message); return; }
+    if (est && est.id) { setSaveErr(''); flash('Saved'); router.replace(`/quote/deck?id=${est.id}`); }
   }
 
   return (
@@ -306,9 +313,17 @@ function DeckQuoteInner() {
                 <span><b>{money(out.effectiveRate)}</b>/hr</span>
               </div>
             </div>
-            <button className="btn" onClick={save} disabled={saving || out.totalHours === 0}>Save quote</button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn ghost" onClick={() => router.push('/quote')}>Done</button>
+              <button className="btn" onClick={save} disabled={saving || !(out.totalHours > 0 && out.price > 0)}>
+                {saving ? 'Saving…' : estimateId ? 'Save changes' : 'Save quote'}
+              </button>
+            </div>
+            {!(out.totalHours > 0 && out.price > 0) && <div className="hint">Enter a measurement before saving</div>}
+            {saveErr && <div className="hint" style={{ color: 'var(--no)', fontWeight: 620 }}>Could not save — {saveErr}</div>}
           </div></div>
         )}
+        {toast && <div className="saved">{toast}</div>}
       </div>
     </Chrome>
   );

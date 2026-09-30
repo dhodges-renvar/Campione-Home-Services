@@ -31,6 +31,9 @@ function DrywallQuoteInner() {
   const { rows: btypes, find: findMargin } = useTradeMargins('drywall');
   const [who, setWho] = useState({ name: '', phone: '', address: '', city: '' });
   const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState('');
+  const [saveErr, setSaveErr] = useState('');
+  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 1800); };
   const [sections, setSections] = useState<Sections>(emptySections());
   const [showDetail, setShowDetail] = useState(false);
 
@@ -104,9 +107,11 @@ function DrywallQuoteInner() {
       notes: `Drywall — ${out!.totalBoards} boards, Level ${job.level}, ${job.turnkey ? 'turnkey' : 'labor only'}`,
     };
     if (estimateId) {
-      await supabase.from('estimates').update(payload).eq('id', estimateId);
-      clearDraft('drywall', estimateId);
-      setSaving(false); router.push('/quote'); return;
+      const { error } = await supabase.from('estimates').update(payload).eq('id', estimateId);
+      setSaving(false);
+      if (error) { setSaveErr(error.message); return; }
+      clearDraft('drywall', estimateId); setSaveErr(''); flash('Saved');
+      return;
     }
     const contactId = who.phone || who.name
       ? (await supabase.rpc('find_or_create_contact', {
@@ -120,14 +125,15 @@ function DrywallQuoteInner() {
         .insert({ address_line1: who.address, city: who.city || null }).select('id').single();
       propertyId = data?.id ?? null;
     }
-    await supabase.from('estimates').insert({
+    const { data: est, error: insErr } = await (supabase.from('estimates').insert({
       contact_id: contactId, property_id: propertyId,
       division: 'painting', service_type: 'other',
       business_type: job.businessType, status: 'draft', ...payload,
-    });
+    }) as any).select('id').single();
     clearDraft('drywall', null);
     setSaving(false);
-    router.push('/quote');
+    if (insErr) { setSaveErr(insErr.message); return; }
+    if (est && est.id) { setSaveErr(''); flash('Saved'); router.replace(`/quote/drywall?id=${est.id}`); }
   }
 
   useAutosave('drywall', estimateId, { job, who }, loaded);
@@ -370,9 +376,17 @@ function DrywallQuoteInner() {
                 <span><b>{out.impliedHours.toFixed(0)}</b> hrs</span>
               </div>
             </div>
-            <button className="btn" onClick={save} disabled={saving || out.totalBoards === 0}>Save quote</button>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn ghost" onClick={() => router.push('/quote')}>Done</button>
+              <button className="btn" onClick={save} disabled={saving || !(out.totalBoards > 0 && out.price > 0)}>
+                {saving ? 'Saving…' : estimateId ? 'Save changes' : 'Save quote'}
+              </button>
+            </div>
+            {!(out.totalBoards > 0 && out.price > 0) && <div className="hint">Enter a measurement before saving</div>}
+            {saveErr && <div className="hint" style={{ color: 'var(--no)', fontWeight: 620 }}>Could not save — {saveErr}</div>}
           </div></div>
         )}
+        {toast && <div className="saved">{toast}</div>}
       </div>
     </Chrome>
   );

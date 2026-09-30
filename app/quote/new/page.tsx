@@ -42,6 +42,9 @@ function NewQuoteInner() {
   const [who, setWho] = useState<Who>({ name: '', phone: '', address: '', city: '' });
   const [specOpen, setSpecOpen] = useState(false);
   const [heatedSf, setHeatedSf] = useState(0);
+  const [toast, setToast] = useState('');
+  const [saveErr, setSaveErr] = useState('');
+  const flash = (m: string) => { setToast(m); setTimeout(() => setToast(''), 1800); };
 
   const [job, setJob] = useState<JobSettings>({
     condition: 'minor_patch', coats: '2', color: 'same', occupancy: 'occupied_light',
@@ -136,6 +139,11 @@ function NewQuoteInner() {
     });
   }, [rooms, rates, mods, settings, job, paintCost, bt]);
 
+  /* Saveable as soon as the quote prices to something. It used to require a
+     room with a length AND a width, which is only true in "Four walls" mode —
+     so Total wall run, Wall by wall and Takeoff could never be saved. */
+  const canSave = !!out && out.totalHours > 0 && out.price > 0;
+
   const opts = (g: string) => mods.filter((m) => m.group_code === g);
   const upd = (k: string, v: any) => setJob((j) => ({ ...j, [k]: v }));
   const setRoom = (k: string, patch: Partial<Room>) =>
@@ -169,11 +177,13 @@ function NewQuoteInner() {
       sort_order: i,
     }));
     if (estimateId) {
-      await supabase.from('estimates').update(priced).eq('id', estimateId);
+      const { error } = await supabase.from('estimates').update(priced).eq('id', estimateId);
+      if (error) { setSaving(false); setSaveErr(error.message); return; }
       await supabase.from('estimate_rooms').delete().eq('estimate_id', estimateId);
       if (job.mode === 'room') await supabase.from('estimate_rooms').insert(roomRows(estimateId));
       clearDraft('painting', estimateId);
-      setSaving(false); router.push('/quote'); return;
+      setSaving(false); setSaveErr(''); flash('Saved');
+      return;
     }
     const contactId = who.contactId ?? (who.phone || who.name
       ? (await supabase.rpc('find_or_create_contact', {
@@ -192,7 +202,7 @@ function NewQuoteInner() {
         await supabase.from('property_contacts').insert({ property_id: propertyId, contact_id: contactId });
     }
 
-    const { data: est } = await supabase.from('estimates').insert({
+    const { data: est, error: insErr } = await (supabase.from('estimates').insert({
       lead_id: leadId,
       contact_id: contactId, property_id: propertyId,
       division: 'painting', service_type: 'interior',
@@ -207,7 +217,8 @@ function NewQuoteInner() {
       labor_cost: out!.laborCost, material_cost: out!.paint + out!.sundries,
       travel_cost: out!.travel, direct_cost: out!.direct,
       target_margin: bt?.target_margin, price: out!.price,
-    }).select('id').single();
+    }) as any).select('id').single();
+    if (insErr) { setSaving(false); setSaveErr(insErr.message); return; }
 
     if (est) {
       await supabase.from('estimate_rooms').insert(rooms.map((r, i) => ({
@@ -226,7 +237,11 @@ function NewQuoteInner() {
     }
     clearDraft('painting', null);
     setSaving(false);
-    router.push('/quote');
+    if (est && est.id) {
+      setSaveErr(''); flash('Saved');
+      // stay put, but now we are editing the saved quote
+      router.replace(`/quote/new?id=${est.id}`);
+    }
   }
 
   useAutosave('painting', estimateId, { job, who, rooms }, loaded);
@@ -555,9 +570,20 @@ function NewQuoteInner() {
                   {heatedSf > 0 && <span><b>{money(out.price / heatedSf)}</b>/sf</span>}
                 </div>
               </div>
-              <button className="btn" onClick={save} disabled={saving || !rooms.some((r) => r.length && r.width)}>
-                Save quote
-              </button>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="btn ghost" onClick={() => router.push('/quote')}>Done</button>
+                <button className="btn" onClick={save} disabled={saving || !canSave}>
+                  {saving ? 'Saving…' : estimateId ? 'Save changes' : 'Save quote'}
+                </button>
+              </div>
+              {!canSave && (
+                <div className="hint">Enter a measurement before saving</div>
+              )}
+              {saveErr && (
+                <div className="hint" style={{ color: 'var(--no)', fontWeight: 620 }}>
+                  Could not save — {saveErr}
+                </div>
+              )}
             </div>
           </div>
         )}
