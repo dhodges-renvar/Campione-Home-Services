@@ -7,10 +7,11 @@ import { supabase } from './supabase';
 import { priceEstimate, JobSettings, Room } from './pricing';
 import { priceDrywall, DrywallJob } from './drywall';
 import { priceDeck, DeckJob } from './deck';
+import { priceExterior, ExtJob } from './exterior';
 
 export type Doc = {
   estimate: any;
-  trade: 'painting' | 'drywall' | 'deck';
+  trade: 'painting' | 'drywall' | 'deck' | 'exterior';
   result: any;
   rooms: Room[];
   margin: number;
@@ -27,7 +28,7 @@ export async function loadDocument(id: string): Promise<Doc | null> {
     supabase.from('modifiers').select('*'),
     supabase.from('business_settings').select('key,value'),
     supabase.from('v_trade_margins').select('*')
-      .eq('trade', trade === 'painting' ? 'painting' : trade)
+      .eq('trade', trade === 'exterior' ? 'exterior_painting' : trade)
       .eq('business_type', est.business_type).maybeSingle(),
   ]);
   const settings = Object.fromEntries((bs || []).map((x: any) => [x.key, Number(x.value)]));
@@ -46,6 +47,20 @@ export async function loadDocument(id: string): Promise<Doc | null> {
       sundriesPerHour: settings['sundries_per_hour'] ?? 3.5, margin, minimum,
       minTripCharge: settings['dw_min_trip_charge'] ?? 212.5,
       minTripBoards: settings['dw_min_trip_boards'] ?? 20,
+    });
+    return { estimate: est, trade, result, rooms: [], margin };
+  }
+
+  if (trade === 'exterior') {
+    const [{ data: surfaces }, { data: products }] = await Promise.all([
+      supabase.from('exterior_surfaces').select('*'),
+      supabase.from('exterior_products').select('*'),
+    ]);
+    const result = priceExterior({
+      job: job as ExtJob, surfaces: (surfaces as any) || [], products: (products as any) || [],
+      mods: (mods as any) || [], settings,
+      laborRate: settings['loaded_labor_rate'] ?? 35.75,
+      sundriesPerHour: settings['sundries_per_hour'] ?? 3.5, margin, minimum,
     });
     return { estimate: est, trade, result, rooms: [], margin };
   }

@@ -10,9 +10,10 @@ import { divisionColor, DIVISION_LABEL } from '@/lib/theme';
 const DIVISIONS: { code: string; label: string; live: boolean;
                    services: { label: string; href: string; note: string }[] }[] = [
   { code: 'painting', label: 'Painting', live: true, services: [
-    { label: 'Interior',  href: '/quote/new',     note: 'Rooms or detailed takeoff' },
-    { label: 'Deck & porch', href: '/quote/deck', note: 'Decks, porches, screened rooms' },
-    { label: 'Drywall',   href: '/quote/drywall', note: 'Hang, finish, sand' },
+    { label: 'Interior',  href: '/quote/new',      note: 'Rooms or detailed takeoff' },
+    { label: 'Exterior',  href: '/quote/exterior', note: 'Body by side, trim, porch, repairs' },
+    { label: 'Deck & porch', href: '/quote/deck',  note: 'Decks, porches, screened rooms' },
+    { label: 'Drywall',   href: '/quote/drywall',  note: 'Hang, finish, sand' },
   ]},
   { code: 'pressure_washing', label: 'Pressure Washing', live: false, services: [] },
   { code: 'cleaning',   label: 'Cleaning',   live: false, services: [] },

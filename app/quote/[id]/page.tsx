@@ -34,6 +34,7 @@ export default function QuoteDocument() {
   } else if (doc.trade === 'drywall') {
     for (const l of r.lines) materials.push({ label: l.label, qty: `${l.qty} ${l.unit}` });
   } else {
+    // deck and exterior both report gallons per surface row
     const byProduct = new Map<string, number>();
     for (const row of r.rows) if (row.gallons > 0) {
       byProduct.set(row.label, (byProduct.get(row.label) ?? 0) + row.gallons);
@@ -82,7 +83,9 @@ export default function QuoteDocument() {
           <div>
             <div className="docname">CAMPIONE</div>
             <div className="docsub">
-              {doc.trade === 'drywall' ? 'DRYWALL' : doc.trade === 'deck' ? 'DECKS & PORCHES' : 'PAINTING'}
+              {doc.trade === 'drywall' ? 'DRYWALL'
+              : doc.trade === 'deck' ? 'DECKS & PORCHES'
+              : doc.trade === 'exterior' ? 'EXTERIOR PAINTING' : 'PAINTING'}
             </div>
           </div>
           <div className="docmeta">
@@ -196,7 +199,9 @@ export default function QuoteDocument() {
       <div className="dock noprint"><div className="inner">
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn ghost" onClick={() => router.push(
-            `${doc.trade === 'drywall' ? '/quote/drywall' : doc.trade === 'deck' ? '/quote/deck' : '/quote/new'}?id=${id}`
+            `${doc.trade === 'drywall' ? '/quote/drywall'
+               : doc.trade === 'deck' ? '/quote/deck'
+               : doc.trade === 'exterior' ? '/quote/exterior' : '/quote/new'}?id=${id}`
           )}>Edit quote</button>
           <button className="btn" onClick={() => window.print()}>Print or save PDF</button>
         </div>
