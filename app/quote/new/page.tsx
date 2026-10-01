@@ -301,6 +301,12 @@ function NewQuoteInner() {
                 </div>
               ))}
               <div className="section-label">Doors and windows</div>
+              <div className="field" style={{ background: 'var(--paper)' }}>
+                <div className="t2">
+                  French doors are counted <b>per slab</b>, not per opening. A pair is 2.
+                  They run about double a solid door because every pane gets masked.
+                </div>
+              </div>
               {rates.filter((r) => r.scope_group === 'door' || r.scope_group === 'window')
                 .map((r) => (
                 <div className="setting" key={r.code}>

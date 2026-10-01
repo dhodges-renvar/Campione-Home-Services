@@ -42,7 +42,7 @@ export default function QuoteList() {
       <div className="bar">
         <div>
           <h1>Quotes</h1>
-          <div className="sub">Tap any quote to pick it back up.</div>
+          <div className="sub">Tap a quote for the proposal and take-off.</div>
         </div>
       </div>
       <div className="main">
@@ -52,7 +52,7 @@ export default function QuoteList() {
             Start one and it lands here.
           </div>
         ) : rows.map((e) => (
-          <button className="row" key={e.id} onClick={() => router.push(`${pathFor(e)}?id=${e.id}`)}>
+          <button className="row" key={e.id} onClick={() => router.push(`/quote/${e.id}`)}>
             <div className="t1">
               {money(e.price)} · {`${e.contacts?.first_name ?? ''} ${e.contacts?.last_name ?? ''}`.trim() || 'No name'}
             </div>
