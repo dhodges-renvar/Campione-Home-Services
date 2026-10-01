@@ -197,16 +197,26 @@ function DrywallQuoteInner() {
                   </button>
                 )}
               </div>
+              <div style={{ marginTop: 8 }}>
+                <label>Ceiling height here</label>
+                <select value={l.access || 'standard'}
+                  onChange={(e) => setLine('wallLines', l.key, { access: e.target.value })}>
+                  {opt('dw_access').map((m) => (
+                    <option key={m.option_code} value={m.option_code}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
               {i === 0 && (
                 <div className="t2" style={{ marginTop: 8 }}>
-                  Add a line for wet walls. Baths, laundry and garage usually need moisture resistant.
+                  Add a line for wet walls, and a separate line for anything tall —
+                  only that line carries the high rate.
                 </div>
               )}
             </div>
           ))}
           <button className="addroom"
             onClick={() => setJob((j) => ({ ...j, wallLines: [...j.wallLines, newLine('mr_12_4x8')] }))}>
-            Add a wall board type
+            Add a wall line
           </button>
 
           <div className="section-label">Ceilings — board type and square footage</div>
@@ -231,16 +241,26 @@ function DrywallQuoteInner() {
                   </button>
                 )}
               </div>
+              <div style={{ marginTop: 8 }}>
+                <label>Ceiling height here</label>
+                <select value={l.access || 'standard'}
+                  onChange={(e) => setLine('ceilingLines', l.key, { access: e.target.value })}>
+                  {opt('dw_access').map((m) => (
+                    <option key={m.option_code} value={m.option_code}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
               {i === 0 && (
                 <div className="t2" style={{ marginTop: 8 }}>
-                  Garage ceilings are 5/8 Type X by code. Bath ceilings usually moisture resistant.
+                  Garage ceilings are 5/8 Type X by code. Put a two-story foyer on its own line
+                  so the rest of the house is not priced at foyer rates.
                 </div>
               )}
             </div>
           ))}
           <button className="addroom"
             onClick={() => setJob((j) => ({ ...j, ceilingLines: [...j.ceilingLines, newLine('x_58_4x8')] }))}>
-            Add a ceiling board type
+            Add a ceiling line
           </button>
 
           <div className="setting">
@@ -254,12 +274,6 @@ function DrywallQuoteInner() {
             <label>Finish level</label>
             <select value={job.level} onChange={(e) => set('level', e.target.value)}>
               {opt('dw_level').map((m) => <option key={m.option_code} value={m.option_code}>{m.label}</option>)}
-            </select>
-          </div>
-          <div className="setting">
-            <label>Access</label>
-            <select value={job.access} onChange={(e) => set('access', e.target.value)}>
-              {opt('dw_access').map((m) => <option key={m.option_code} value={m.option_code}>{m.label}</option>)}
             </select>
           </div>
           <div className="setting">

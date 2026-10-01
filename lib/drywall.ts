@@ -29,10 +29,12 @@ export type BeadLine = { code: string; pieces: number };
 /* A house is never one board type. Wet walls get moisture resistant, garage
    ceilings get Type X, the rest gets standard. Each surface is its own line
    with its own square footage. */
-export type BoardLine = { key: string; code: string; sf: number };
+/* Access rides on the LINE, not the job. A two-story foyer does not make the
+   bedrooms harder to hang, so only the tall line carries the tall rate. */
+export type BoardLine = { key: string; code: string; sf: number; access: string };
 
-export const newLine = (code: string): BoardLine =>
-  ({ key: Math.random().toString(36).slice(2), code, sf: 0 });
+export const newLine = (code: string, access = 'standard'): BoardLine =>
+  ({ key: Math.random().toString(36).slice(2), code, sf: 0, access });
 
 export type DrywallJob = {
   turnkey: boolean;
@@ -74,27 +76,29 @@ export function priceDrywall(o: {
   const byCode = new Map(boards.map((b) => [b.code, b]));
 
   const levelMult   = mod(mods, 'dw_level', job.level);
-  const accessMult  = mod(mods, 'dw_access', job.access);
   const ceilingMult = mod(mods, 'dw_ceiling', 'ceiling');
 
-  type Take = { board: Board; qty: number; sf: number; ceiling: boolean };
+  type Take = { board: Board; qty: number; sf: number; ceiling: boolean;
+                access: string; accessMult: number };
   const takeoff: Take[] = [];
 
-  for (const l of job.wallLines) {
+  const push = (l: BoardLine, ceiling: boolean) => {
     const b = byCode.get(l.code);
-    if (!b || !l.sf) continue;
-    takeoff.push({ board: b, qty: Math.ceil((l.sf / b.sf_per_board) * waste), sf: l.sf, ceiling: false });
-  }
-  for (const l of job.ceilingLines) {
-    const b = byCode.get(l.code);
-    if (!b || !l.sf) continue;
-    takeoff.push({ board: b, qty: Math.ceil((l.sf / b.sf_per_board) * waste), sf: l.sf, ceiling: true });
-  }
+    if (!b || !l.sf) return;
+    const access = l.access || job.access || 'standard';
+    takeoff.push({
+      board: b, qty: Math.ceil((l.sf / b.sf_per_board) * waste), sf: l.sf, ceiling,
+      access, accessMult: mod(mods, 'dw_access', access),
+    });
+  };
+  for (const l of job.wallLines) push(l, false);
+  for (const l of job.ceilingLines) push(l, true);
 
-  // merge lines that landed on the same board so the take-off reads cleanly
+  // merge only lines that match on board AND access, so a tall foyer stays
+  // its own row instead of being averaged into the bedrooms
   const merged = new Map<string, Take>();
   for (const t of takeoff) {
-    const k = `${t.board.code}|${t.ceiling}`;
+    const k = `${t.board.code}|${t.ceiling}|${t.access}`;
     const e = merged.get(k);
     if (e) { e.qty += t.qty; e.sf += t.sf; } else merged.set(k, { ...t });
   }
@@ -108,12 +112,12 @@ export function priceDrywall(o: {
   // ---- labor: hang, finish and sand are three crews ----
   let hang = 0, finish = 0, sand = 0;
   for (const r of rows) {
-    const m = r.ceiling ? ceilingMult : 1;
+    const m = (r.ceiling ? ceilingMult : 1) * r.accessMult;
     hang   += r.qty * r.board.hang_each * m;
     finish += r.qty * r.board.finish_each * m * levelMult;
     sand   += r.qty * (r.board.sand_each ?? 0) * m * levelMult;
   }
-  const boardLabor = (hang + finish + sand) * accessMult;
+  const boardLabor = hang + finish + sand;
 
   const touchHours = (job.touchPrime || 0) + (job.touchFinal || 0) +
                      (job.touchQc || 0) + (job.touchHome || 0) +
@@ -129,9 +133,11 @@ export function priceDrywall(o: {
   for (const r of rows) {
     const cost = job.turnkey ? r.qty * r.board.price_each : 0;
     lines.push({
-      label: r.ceiling ? `${r.board.label} (ceiling)` : r.board.label,
+      label: (r.ceiling ? `${r.board.label} (ceiling)` : r.board.label)
+             + (r.accessMult !== 1 ? ` — ${r.access.replace('_', ' ')}` : ''),
       qty: r.qty, unit: 'boards', cost,
-      why: `${r.sf} sf / ${r.board.sf_per_board} sf per board, +${Math.round((waste - 1) * 100)}% waste`,
+      why: `${r.sf} sf / ${r.board.sf_per_board} sf per board, +${Math.round((waste - 1) * 100)}% waste`
+           + (r.accessMult !== 1 ? ` · ${r.access.replace('_', ' ')} ×${r.accessMult.toFixed(2)}` : ''),
     });
     materialCost += cost;
   }
@@ -190,8 +196,8 @@ export function priceDrywall(o: {
   const price = Math.max(calculated, minimum);
 
   return {
-    wallBoards, ceilBoards, totalBoards, totalSf,
-    levelMult, accessMult,
+    wallBoards, ceilBoards, totalBoards, totalSf, rows,
+    levelMult,
     hang, finish, sand, boardLabor, touchHours, openingHours, hourlyLabor,
     laborCost, materialCost, sundries, tripCharge, tripApplies, lines,
     direct, price,
