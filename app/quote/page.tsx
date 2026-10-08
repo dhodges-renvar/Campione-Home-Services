@@ -16,7 +16,9 @@ const DIVISIONS: { code: string; label: string; live: boolean;
     { label: 'Drywall',   href: '/quote/drywall',  note: 'Hang, finish, sand' },
   ]},
   { code: 'pressure_washing', label: 'Pressure Washing', live: false, services: [] },
-  { code: 'cleaning',   label: 'Cleaning',   live: false, services: [] },
+  { code: 'cleaning',   label: 'Cleaning',   live: true, services: [
+    { label: 'Cleaning', href: '/quote/cleaning', note: 'Finals, turns, recurring and glass' },
+  ]},
   { code: 'exteriors',  label: 'Exteriors',  live: false, services: [] },
 ];
 
@@ -24,7 +26,11 @@ const money = (n: number) => '$' + Math.round(n || 0).toLocaleString();
 const tradeOf = (e: any) => (e?.settings?.trade as string) || 'painting';
 const pathFor = (e: any) => {
   const t = tradeOf(e);
-  return t === 'drywall' ? '/quote/drywall' : t === 'deck' ? '/quote/deck' : '/quote/new';
+  return t === 'drywall' ? '/quote/drywall'
+       : t === 'deck' ? '/quote/deck'
+       : t === 'exterior' ? '/quote/exterior'
+       : t === 'cleaning' ? '/quote/cleaning'
+       : '/quote/new';
 };
 
 export default function QuoteList() {

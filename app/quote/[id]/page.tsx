@@ -55,6 +55,9 @@ export default function QuoteDocument() {
   } else {
     for (const row of r.rows) quantities.push({
       label: row.label, qty: `${row.qty} ${row.unit}`, hours: n1(row.hours) });
+    // glass is priced off the published list, so it carries a price not hours
+    for (const w of (r.windowRows || [])) quantities.push({
+      label: w.label, qty: `${w.count} ea`, hours: undefined });
   }
 
   const hours = doc.trade === 'drywall' ? r.impliedHours : r.totalHours;
@@ -85,7 +88,8 @@ export default function QuoteDocument() {
             <div className="docsub">
               {doc.trade === 'drywall' ? 'DRYWALL'
               : doc.trade === 'deck' ? 'DECKS & PORCHES'
-              : doc.trade === 'exterior' ? 'EXTERIOR PAINTING' : 'PAINTING'}
+              : doc.trade === 'exterior' ? 'EXTERIOR PAINTING'
+              : doc.trade === 'cleaning' ? 'CLEANING' : 'PAINTING'}
             </div>
           </div>
           <div className="docmeta">
@@ -201,7 +205,8 @@ export default function QuoteDocument() {
           <button className="btn ghost" onClick={() => router.push(
             `${doc.trade === 'drywall' ? '/quote/drywall'
                : doc.trade === 'deck' ? '/quote/deck'
-               : doc.trade === 'exterior' ? '/quote/exterior' : '/quote/new'}?id=${id}`
+               : doc.trade === 'exterior' ? '/quote/exterior'
+               : doc.trade === 'cleaning' ? '/quote/cleaning' : '/quote/new'}?id=${id}`
           )}>Edit quote</button>
           <button className="btn" onClick={() => window.print()}>Print or save PDF</button>
         </div>

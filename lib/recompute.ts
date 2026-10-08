@@ -8,10 +8,11 @@ import { priceEstimate, JobSettings, Room } from './pricing';
 import { priceDrywall, DrywallJob } from './drywall';
 import { priceDeck, DeckJob } from './deck';
 import { priceExterior, ExtJob } from './exterior';
+import { priceCleaning, CleanJob } from './cleaning';
 
 export type Doc = {
   estimate: any;
-  trade: 'painting' | 'drywall' | 'deck' | 'exterior';
+  trade: 'painting' | 'drywall' | 'deck' | 'exterior' | 'cleaning';
   result: any;
   rooms: Room[];
   margin: number;
@@ -61,6 +62,24 @@ export async function loadDocument(id: string): Promise<Doc | null> {
       mods: (mods as any) || [], settings,
       laborRate: settings['loaded_labor_rate'] ?? 35.75,
       sundriesPerHour: settings['sundries_per_hour'] ?? 3.5, margin, minimum,
+    });
+    return { estimate: est, trade, result, rooms: [], margin };
+  }
+
+  if (trade === 'cleaning') {
+    const [{ data: types }, { data: addons }, { data: winRates }] = await Promise.all([
+      supabase.from('cleaning_types').select('*'),
+      supabase.from('cleaning_addons').select('*'),
+      supabase.from('window_clean_rates').select('*'),
+    ]);
+    const result = priceCleaning({
+      job: job as CleanJob, types: (types as any) || [], addons: (addons as any) || [],
+      windows: (winRates as any) || [], mods: (mods as any) || [],
+      laborRate: settings['clean_labor_rate'] ?? 26,
+      suppliesPerHour: settings['clean_supplies_per_hour'] ?? 2.25,
+      tripCharge: settings['clean_trip_charge'] ?? 0,
+      crewSize: settings['clean_crew_size'] ?? 2,
+      margin, minimum,
     });
     return { estimate: est, trade, result, rooms: [], margin };
   }
