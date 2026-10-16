@@ -1,25 +1,38 @@
 /** @type {import('next').NextConfig} */
-const build = (process.env.VERCEL_GIT_COMMIT_SHA || 'local').slice(0, 7);
-const built = new Date().toISOString().slice(0, 16).replace('T', ' ');
+const securityHeaders = [
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+];
 
-export default {
+const nextConfig = {
   reactStrictMode: true,
-  env: { NEXT_PUBLIC_BUILD: build, NEXT_PUBLIC_BUILT_AT: built },
+  poweredByHeader: false,
+  compress: true,
+  productionBrowserSourceMaps: false,
+  images: {
+    formats: ['image/avif', 'image/webp'],
+  },
   async headers() {
     return [
+      { source: '/:path*', headers: securityHeaders },
       {
-        // pages revalidate every load, so a new deploy shows up without a hard refresh
-        source: '/((?!_next/static|icon-|manifest).*)',
-        headers: [
-          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
-          { key: 'Cache-Control', value: 'no-cache, must-revalidate' },
-        ],
-      },
-      {
-        // hashed build assets can cache forever — their names change every deploy
-        source: '/_next/static/:path*',
+        source: '/img/:path*',
         headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
       },
     ];
   },
+  async redirects() {
+    return [
+      { source: '/painting-monroe-ga', destination: '/painting', permanent: true },
+      { source: '/services/painting', destination: '/painting', permanent: true },
+      { source: '/services/drywall', destination: '/drywall', permanent: true },
+      { source: '/interior-painting', destination: '/painting', permanent: true },
+      { source: '/exterior-painting', destination: '/exteriors', permanent: true },
+    ];
+  },
 };
+
+export default nextConfig;
