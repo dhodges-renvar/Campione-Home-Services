@@ -13,6 +13,7 @@ import { priceDeck, deckWarnings, newDeckLine, DeckJob, Surface, Product, Mod } 
 const money = (n: any) => '$' + Math.round(Number(n) || 0).toLocaleString();
 const CATS: [string, string][] = [
   ['prep', 'Prep'], ['floor', 'Floor'], ['rail', 'Rail'], ['stair', 'Stairs'],
+  ['substructure', 'Posts and underside'],
   ['structure', 'Covered / structure'], ['screen', 'Screens'], ['repair', 'Repairs'],
 ];
 /* A plain deck, preloaded. Everything else is one tap away. */
@@ -92,6 +93,7 @@ function DeckQuoteInner() {
       sundriesPerHour: settings['sundries_per_hour'] ?? 3.5,
       margin: Number(bt?.target_margin ?? 0.5),
       minimum: Number(bt?.minimum_charge ?? 650),
+      minimumHours: settings['minimum_crew_hours'] ?? 8,
     });
   }, [job, surfaces, products, mods, settings, bt]);
 
@@ -286,11 +288,31 @@ function DeckQuoteInner() {
                       <b>{r.hours.toFixed(1)} hr{r.gallons ? ` · ${r.gallons.toFixed(1)} gal` : ''}</b>
                     </div>
                   ))}
+                  {out.productLines.length > 0 && (
+                    <div style={{ borderTop: '1px solid var(--line)', marginTop: 10, paddingTop: 10 }}>
+                      <div style={{ color: 'var(--ink-3)', fontSize: 13, letterSpacing: '.06em',
+                                    textTransform: 'uppercase', paddingBottom: 4 }}>Material to buy</div>
+                      {out.productLines.map((p) => (
+                        <div key={p.code} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 15 }}>
+                          <span style={{ color: 'var(--ink-3)' }}>
+                            {p.label}{p.buy > p.raw + 0.01 ? ` · needs ${p.raw.toFixed(1)}` : ''}
+                          </span>
+                          <b>{p.packs || `${p.buy} gal`}</b>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ borderTop: '1px solid var(--line)', marginTop: 10, paddingTop: 10 }}>
                     {[['Condition, finish and access', `× ${out.labourMult.toFixed(2)}`],
                       ['Trips and protection', `${out.extras.toFixed(2)} hr`],
+                      ['Hours worked', `${out.workedHours.toFixed(1)} hr`],
+                      ...(out.minimumHoursApplied
+                        ? [[`Billed at the ${out.minHours} hr day minimum`, `${out.totalHours.toFixed(1)} hr`]]
+                        : []),
                       ['Labor', money(out.laborCost)], ['Material', money(out.materialCost)],
-                      ['Direct cost', money(out.direct)], ['Gross profit', money(out.grossProfit)]].map(([l, v]: any) => (
+                      ['Direct cost', money(out.direct)], ['Gross profit', money(out.grossProfit)],
+                      ...(out.minimumChargeApplied
+                        ? [['Minimum charge applied', money(out.price)]] : [])].map(([l, v]: any) => (
                       <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 15 }}>
                         <span style={{ color: 'var(--ink-3)' }}>{l}</span><b>{v}</b>
                       </div>
