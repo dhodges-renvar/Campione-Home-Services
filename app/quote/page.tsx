@@ -19,7 +19,9 @@ const DIVISIONS: { code: string; label: string; live: boolean;
   { code: 'cleaning',   label: 'Cleaning',   live: true, services: [
     { label: 'Cleaning', href: '/quote/cleaning', note: 'Finals, turns, recurring and glass' },
   ]},
-  { code: 'exteriors',  label: 'Exteriors',  live: false, services: [] },
+  { code: 'exteriors',  label: 'Exteriors',  live: true, services: [
+    { label: 'Siding', href: '/quote/siding', note: 'Siding, cornice, trim, porch and ceilings' },
+  ]},
 ];
 
 const money = (n: number) => '$' + Math.round(n || 0).toLocaleString();
@@ -30,6 +32,7 @@ const pathFor = (e: any) => {
        : t === 'deck' ? '/quote/deck'
        : t === 'exterior' ? '/quote/exterior'
        : t === 'cleaning' ? '/quote/cleaning'
+       : t === 'siding' ? '/quote/siding'
        : '/quote/new';
 };
 
